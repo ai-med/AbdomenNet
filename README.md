@@ -1,1 +1,1 @@
-# whole_body_segmentation
+# abdominal_segmentation
