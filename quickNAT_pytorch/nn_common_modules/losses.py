@@ -27,7 +27,7 @@ class DiceLoss(_WeightedLoss):
     Dice Loss for a batch of samples
     """
 
-    def forward(self, output, target):
+    def forward(self, output, target, weight=None):
         #print('output: ', output.shape)
         #print('target: ', target.shape)
         output = F.softmax(output, dim=1)
@@ -51,6 +51,9 @@ class DiceLoss(_WeightedLoss):
         #print(num_union_pixels)
 
         loss_per_class = 1 - ((2 * intersection) / (num_union_pixels + eps))
+        if weight is None:
+            weight = torch.ones_like(loss_per_class)
+        loss_per_class *= weight
 
         return (loss_per_class.sum(1) / (num_union_pixels != 0).sum(1).float()).mean()
 
@@ -66,7 +69,7 @@ class CombinedLoss(_Loss):
         self.cross_entropy_loss = nn.CrossEntropyLoss(reduction='none')
         self.dice_loss = DiceLoss()
 
-    def forward(self, input, target, class_weights=None):
+    def forward(self, input, target, class_weights=None, dice_weights=None):
         """
         Forward pass
 
@@ -75,7 +78,7 @@ class CombinedLoss(_Loss):
         :param class_weights: torch.tensor (NxHxW)
         :return: scalar
         """
-        y_2 = self.dice_loss(input, target)
+        y_2 = self.dice_loss(input, target, dice_weights)
         #print('dice loss', y_2)
         if class_weights is None:
             y_1 = torch.mean(self.cross_entropy_loss.forward(input, target))

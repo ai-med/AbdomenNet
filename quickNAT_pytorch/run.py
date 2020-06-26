@@ -6,7 +6,7 @@ from quicknat import QuickNat
 from fastSurferCNN import FastSurferCNN
 from settings import Settings
 from solver import Solver
-from utils.data_utils import get_imdb_dataset
+from utils.data_utils import get_imdb_dataset, get_imdb_dataset_3channel
 from utils.log_utils import LogWriter
 import logging
 import shutil
@@ -16,7 +16,10 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 def load_data(data_params):
     print("Loading dataset")
-    train_data, test_data = get_imdb_dataset(data_params)
+    if data_params['use_3channel'] == True:
+        train_data, test_data = get_imdb_dataset_3channel(data_params)
+    else:
+        train_data, test_data = get_imdb_dataset(data_params)
     print("Train size: %i" % len(train_data))
     print("Test size: %i" % len(test_data))
     return train_data, test_data
@@ -171,7 +174,7 @@ if __name__ == '__main__':
     parser.add_argument('--setting_path', '-sp', required=False, help='optional path to settings_eval_nako.ini')
     args = parser.parse_args()
 
-    settings = Settings('settings_merged.ini')
+    settings = Settings('settings_kora.ini')
     common_params, data_params, net_params, train_params, eval_params = settings['COMMON'], settings['DATA'], \
                                                                         settings[
                                                                             'NETWORK'], settings['TRAINING'], \

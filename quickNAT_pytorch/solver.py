@@ -104,10 +104,12 @@ class Solver(object):
                     X = sample_batched[0].type(torch.FloatTensor)
                     y = sample_batched[1].type(torch.LongTensor)
                     w = sample_batched[2].type(torch.FloatTensor)
-
+                    wd = sample_batched[3].type(torch.FloatTensor)
+                    #print('dice weights ', wd.shape)
                     if model.is_cuda:
-                        X, y, w = X.cuda(self.device, non_blocking=True), y.cuda(self.device,
+                        X, y, w, wd = X.cuda(self.device, non_blocking=True), y.cuda(self.device,
                                                                                  non_blocking=True), w.cuda(self.device,
+                                                                                                           non_blocking=True), wd.cuda(self.device,
                                                                                                            non_blocking=True)
 
                     output = model(X)
@@ -119,7 +121,7 @@ class Solver(object):
                         #print(y.shape)
                         #print(output.shape)
                         pass
-                    loss = self.loss_func(output, y, w)
+                    loss = self.loss_func(output, y, w, wd)
                     if phase == 'train':
                         optim.zero_grad()
                         loss.backward()
