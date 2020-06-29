@@ -80,7 +80,7 @@ def evaluate(eval_params, net_params, data_params, common_params, train_params):
     prediction_path = os.path.join(exp_dir, exp_name, save_predictions_dir)
     orientation = eval_params['orientation']
     data_id = eval_params['data_id']
-
+    multi_channel = data_params['use_3channel']
     logWriter = LogWriter(num_classes, log_dir, exp_name, labels=labels)
 
     avg_dice_score, class_dist = eu.evaluate_dice_score(eval_model_path,
@@ -93,7 +93,8 @@ def evaluate(eval_params, net_params, data_params, common_params, train_params):
                                                         prediction_path,
                                                         data_id,
                                                         device,
-                                                        logWriter)
+                                                        logWriter,
+                                                        multi_channel=multi_channel)
     logWriter.close()
 
 

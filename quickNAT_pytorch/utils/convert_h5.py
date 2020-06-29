@@ -6,10 +6,13 @@ Sample command to create new dataset
 
 for single create_datasets:
 
+# standard single dataset
 python utils/convert_h5.py -dd /home/anne/phd/projects/whole_body/whole_body_segmentation/quickNAT_pytorch/create_datasets/KORA/data -ld /home/anne/phd/projects/whole_body/whole_body_segmentation/quickNAT_pytorch/create_datasets/KORA/data  -rc none -o COR -df /home/anne/phd/projects/whole_body/whole_body_segmentation/quickNAT_pytorch/create_datasets/KORA/coronal_2 -id KORA -trv /home/anne/phd/projects/whole_body/whole_body_segmentation/quickNAT_pytorch/create_datasets/KORA/KORA.train -tev /home/anne/phd/projects/whole_body/whole_body_segmentation/quickNAT_pytorch/create_datasets/KORA/KORA.test -valv /home/anne/phd/projects/whole_body/whole_body_segmentation/quickNAT_pytorch/create_datasets/new/KORA/KORA.val
 
- -dd /mnt/nas/Users/Anne/wholebodysegmentation/datasets/multi_channel/ -ld /mnt/nas/Users/Anne/wholebodysegmentation/datasets/multi_channel/  -rc none -o SAG -df /mnt/nas/Users/Anne/wholebodysegmentation/datasets/multi_channel/KORA/sagittal -id KORA -trv /mnt/nas/Users/Anne/wholebodysegmentation/datasets/multi_channel/KORA/KORA.train -tev /mnt/nas/Users/Anne/wholebodysegmentation/datasets/multi_channel/KORA/KORA.test -valv /mnt/nas/Users/Anne/wholebodysegmentation/datasets/multi_channel/KORA/KORA.val -nc 3
+# multi channel:
+ -dd /mnt/nas/Users/Anne/wholebodysegmentation/datasets/multi_channel/ -ld /mnt/nas/Users/Anne/wholebodysegmentation/datasets/multi_channel/  -rc none -o AXI -df /mnt/nas/Users/Anne/wholebodysegmentation/datasets/multi_channel/KORA/axial -id KORA -trv /mnt/nas/Users/Anne/wholebodysegmentation/datasets/multi_channel/KORA/KORA.train -tev /mnt/nas/Users/Anne/wholebodysegmentation/datasets/multi_channel/KORA/KORA.test -valv /mnt/nas/Users/Anne/wholebodysegmentation/datasets/multi_channel/KORA/KORA.val -nc 3
 
+# KORANAKOUKB
 python utils/convert_h5.py -dd /mnt/nas/Users/Anne/wholebodysegmentation/datasets -ld /mnt/nas/Users/Anne/wholebodysegmentation/datasets  -rc none -o SAG -df /mnt/nas/Users/Anne/wholebodysegmentation/datasets/KORANAKOUKB/sagittal -id All
 
 

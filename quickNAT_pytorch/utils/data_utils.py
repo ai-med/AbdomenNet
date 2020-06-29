@@ -172,7 +172,7 @@ def load_and_preprocess(file_path, orientation, remap_config, reduce_slices=Fals
     #print(file_path)
     volume, labelmap, header = load_data(file_path, orientation)
 
-    volume, labelmap, class_weights, weights = preprocess_3channel(volume,  labelmap, remap_config=remap_config,
+    volume, labelmap, class_weights, weights = preprocess(volume,  labelmap, remap_config=remap_config,
                                                           reduce_slices=reduce_slices,
                                                           remove_black=remove_black,
                                                           return_weights=return_weights)

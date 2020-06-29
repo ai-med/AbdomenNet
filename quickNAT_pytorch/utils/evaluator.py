@@ -96,7 +96,7 @@ def compute_structure_uncertainty(mc_pred_list, label_map, ID):
 
 
 def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_txt_file, remap_config, orientation,
-                        prediction_path, data_id, device=0, logWriter=None, mode='eval'):
+                        prediction_path, data_id, device=0, logWriter=None, mode='eval', multi_channel=False):
     log.info("**Starting evaluation. Please check tensorboard for plots if a logWriter is provided in arguments**")
 
     batch_size = 16
@@ -111,7 +111,11 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
     else:
         with open(volumes_txt_file) as file_handle:
             volumes_to_use = file_handle.read().splitlines()
-        file_paths = du.load_file_paths(data_dir, label_dir, data_id, volumes_txt_file)
+        if multi_channel:
+            file_paths = du.load_file_paths_3channel(data_dir, label_dir, data_id, volumes_txt_file)
+
+        else:
+            file_paths = du.load_file_paths(data_dir, label_dir, data_id, volumes_txt_file)
 
     cuda_available = torch.cuda.is_available()
     # First, are we attempting to run on a GPU?
@@ -143,17 +147,31 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
     log.info("Evaluating now...")
     with torch.no_grad():
         for vol_idx, file_path in enumerate(file_paths):
-            volume, labelmap, class_weights, weights, header = du.load_and_preprocess(file_path,
+            if multi_channel:
+                volume, fat, water, labelmap, class_weights, weights, header = du.load_and_preprocess_3channel(file_path,
+                                                                                          orientation=orientation,
+                                                                                          remap_config=remap_config)
+                volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
+                fat = fat if len(fat.shape) == 4 else fat[:, np.newaxis, :, :]
+                water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
+                volume, fat, water, labelmap = torch.tensor(volume).type(torch.FloatTensor),torch.tensor(fat).type(torch.FloatTensor), torch.tensor(water).type(torch.FloatTensor), torch.tensor(labelmap).type(
+                    torch.LongTensor)
+            else:
+                volume, labelmap, class_weights, weights, header = du.load_and_preprocess(file_path,
                                                                                       orientation=orientation,
                                                                                       remap_config=remap_config)
 
-            volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
-            volume, labelmap = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(labelmap).type(
-                torch.LongTensor)
+                volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
+                volume, labelmap = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(labelmap).type(
+                    torch.LongTensor)
 
             volume_prediction = []
             for i in range(0, len(volume), batch_size):
-                batch_x, batch_y = volume[i: i + batch_size], labelmap[i:i + batch_size]
+                if multi_channel:
+                    batch_x, batch_y = torch.cat((volume[i: i + batch_size],fat[i: i + batch_size],water[i: i + batch_size]),dim=1), labelmap[i:i + batch_size]
+
+                else:
+                    batch_x, batch_y = volume[i: i + batch_size], labelmap[i:i + batch_size]
                 if cuda_available and (type(device)==int):
                     batch_x = batch_x.cuda(device)
                 out = model(batch_x)
@@ -173,7 +191,7 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
                 new_orientation = 'COR'
             else:
                 new_orientation = 'SAG'
-            _, volume_prediction = rotate_orientation(volume[:,0,:,:].numpy(), volume_prediction, orientation=new_orientation )
+            volume_prediction = rotate_orientation(volume_prediction, orientation=new_orientation )
             # reverse remap labels, to be able to compare output to freesurfer GT
             #volume_prediction = reverse_remap_labels(volume_prediction, remap_config)
 
@@ -198,9 +216,9 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
             volume_dice_score_list.append(volume_dice_score)
             log.info(volume_dice_score, np.mean(volume_dice_score))
         dice_score_arr = np.asarray(volume_dice_score_list)
-        avg_dice_score = np.mean(dice_score_arr)
-        log.info("Mean of dice score : " + str(avg_dice_score))
-        print('Mean dice score: ', avg_dice_score)
+        avg_dice_score = np.mean(dice_score_arr[:,1:])
+        log.info("Mean of dice score (no background) : " + str(avg_dice_score))
+        print('Mean dice score (no background): ', avg_dice_score)
         print('all dice scores: ', dice_score_arr)
         class_dist = [dice_score_arr[:, c] for c in range(num_classes)]
 

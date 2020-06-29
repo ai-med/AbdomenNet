@@ -98,12 +98,14 @@ class QuickNat(nn.Module):
         - X: Volume to be predicted
         """
         self.eval()
+        print('in predict, X shape: ', X.shape)
 
         if type(X) is np.ndarray:
             X = torch.tensor(X, requires_grad=False).type(torch.FloatTensor).cuda(device, non_blocking=True)
         elif type(X) is torch.Tensor and not X.is_cuda:
             X = X.type(torch.FloatTensor).cuda(device, non_blocking=True)
-
+        X = X.permute(1, 0, 2, 3)
+        print('after permute ', X.shape)
         if enable_dropout:
             self.enable_test_dropout()
 
@@ -116,5 +118,6 @@ class QuickNat(nn.Module):
             max_val, idx = torch.max(out, 1)
             idx = idx.data.cpu().numpy()
             prediction = np.squeeze(idx)
+            print('after squeeze pred ', prediction.shape)
             del X, out, idx, max_val
             return prediction
