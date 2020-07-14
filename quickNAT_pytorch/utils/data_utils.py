@@ -42,6 +42,7 @@ class ImdbData_3channel(data.Dataset):
         self.wd = wd
         self.transforms = transforms
 
+
     def __getitem__(self, index):
         img1 = torch.from_numpy(self.X[index])
         img2 = torch.from_numpy(self.X2[index])
@@ -335,6 +336,47 @@ def load_file_paths(data_dir, label_dir, data_id, volumes_txt_file=None):
     if data_id == 'KORA':
         file_paths = [
             [os.path.join(data_dir, data_id, 'data', vol, 'transformed_corrected.nii.gz'), os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+            for
+            vol in volumes_to_use]
+    elif data_id == 'NAKO':
+        file_paths = [
+            [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
+             os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+            for
+            vol in volumes_to_use]
+    elif data_id == 'UKB':
+        file_paths = [
+            [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
+             os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+            for
+            vol in volumes_to_use]
+    else:
+        raise ValueError("Invalid entry, valid options are MALC, ADNI, CANDI and IBSR")
+
+    return file_paths
+
+
+def _load_file_paths_(data_dir, label_dir, data_id, volumes_txt_file=None):
+    """
+    This function returns the file paths combined as a list where each element is a 2 element tuple, 0th being data and 1st being label.
+    It should be modified to suit the need of the project
+    :param data_dir: Directory which contains the data files
+    :param label_dir: Directory which contains the label files
+    :param data_id: A flag indicates the name of Dataset for proper file reading
+    :param volumes_txt_file: (Optional) Path to the a csv file, when provided only these data points will be read
+    :return: list of file paths as string
+    """
+
+    if volumes_txt_file:
+        with open(volumes_txt_file) as file_handle:
+            volumes_to_use = file_handle.read().splitlines()
+    else:
+        volumes_to_use = [name for name in os.listdir(data_dir)]
+
+    if data_id == 'KORA':
+        file_paths = [
+            [os.path.join(data_dir, f'{vol}.nii.gz'),
+             os.path.join(label_dir, f'{vol}.nii.gz')]
             for
             vol in volumes_to_use]
     elif data_id == 'NAKO':

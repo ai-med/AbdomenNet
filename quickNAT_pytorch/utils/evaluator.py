@@ -9,17 +9,20 @@ import utils.common_utils as common_utils
 import utils.data_utils as du
 from utils.preprocessor import rotate_orientation
 import torch.nn.functional as F
+
 log = logging.getLogger(__name__)
+
 
 def dice_confusion_matrix(vol_output, ground_truth, classes, no_samples=10, mode='train'):
     dice_cm = torch.zeros(len(classes), len(classes))
+
     print('dice cm ', dice_cm.shape)
     if mode == 'train':
         samples = np.random.choice(len(vol_output), no_samples)
         vol_output, ground_truth = vol_output[samples], ground_truth[samples]
-    for i,c in enumerate(classes):
+    for i, c in enumerate(classes):
         GT = (ground_truth == c).float()
-        for j,c in enumerate(classes):
+        for j, c in enumerate(classes):
             Pred = (vol_output == c).float()
             inter = torch.sum(torch.mul(GT, Pred))
             union = torch.sum(GT) + torch.sum(Pred) + 0.0001
@@ -29,12 +32,11 @@ def dice_confusion_matrix(vol_output, ground_truth, classes, no_samples=10, mode
 
 
 def dice_score_perclass(vol_output, ground_truth, classes, no_samples=10, mode='train'):
-
     dice_perclass = torch.zeros(len(classes))
     if mode == 'train':
         samples = np.random.choice(len(vol_output), no_samples)
         vol_output, ground_truth = vol_output[samples], ground_truth[samples]
-    for i,c in enumerate(classes):
+    for i, c in enumerate(classes):
         GT = (ground_truth == c).float()
         Pred = (vol_output == c).float()
         inter = torch.sum(torch.mul(GT, Pred))
@@ -98,16 +100,19 @@ def compute_structure_uncertainty(mc_pred_list, label_map, ID):
 def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_txt_file, remap_config, orientation,
                         prediction_path, data_id, device=0, logWriter=None, mode='eval', multi_channel=False):
     log.info("**Starting evaluation. Please check tensorboard for plots if a logWriter is provided in arguments**")
-
     batch_size = 16
 
     if data_id == 'KORANAKOUKB':
         file_paths = []
         volumes_to_use = []
-        for did in ['KORA','NAKO','UKB']:
-            with open(os.path.join(volumes_txt_file, did, did+'.test')) as file_handle:
+        for did in ['KORA', 'NAKO', 'UKB']:
+            ext = '.test'
+            # if did == 'KORA':
+            #     ext = '.val'
+
+            with open(os.path.join(volumes_txt_file, did, did + ext)) as file_handle:
                 volumes_to_use += file_handle.read().splitlines()
-            file_paths += du.load_file_paths(data_dir, label_dir, did, os.path.join(volumes_txt_file, did, did+'.test'))
+            file_paths += du.load_file_paths(data_dir, label_dir, did, os.path.join(volumes_txt_file, did, did + ext))
     else:
         with open(volumes_txt_file) as file_handle:
             volumes_to_use = file_handle.read().splitlines()
@@ -134,9 +139,9 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
             # switch device to 'cpu'
             device = 'cpu'
     # If device is 'cpu' or CUDA not available
-    if (type(device)==str) or not cuda_available:
+    if (type(device) == str) or not cuda_available:
         model = torch.load(
-            model_path, 
+            model_path,
             map_location=torch.device(device)
         )
 
@@ -161,9 +166,9 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
                                                                                       orientation=orientation,
                                                                                       remap_config=remap_config)
 
-                volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
-                volume, labelmap = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(labelmap).type(
-                    torch.LongTensor)
+            volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
+            volume, labelmap = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(labelmap).type(
+                torch.LongTensor)
 
             volume_prediction = []
             for i in range(0, len(volume), batch_size):
@@ -179,7 +184,8 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
                 volume_prediction.append(batch_output)
 
             volume_prediction = torch.cat(volume_prediction)
-            volume_dice_score = dice_score_perclass(volume_prediction, labelmap.cuda(device), np.arange(0,num_classes), mode=mode)
+            volume_dice_score = dice_score_perclass(volume_prediction, labelmap.cuda(device), np.arange(0, num_classes),
+                                                    mode=mode)
 
             volume_prediction = (volume_prediction.cpu().numpy()).astype('int16')
 
@@ -191,11 +197,12 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
                 new_orientation = 'COR'
             else:
                 new_orientation = 'SAG'
-            volume_prediction = rotate_orientation(volume_prediction, orientation=new_orientation )
+            _, volume_prediction = rotate_orientation(volume[:, 0, :, :].numpy(), volume_prediction,
+                                                      orientation=new_orientation)
             # reverse remap labels, to be able to compare output to freesurfer GT
-            #volume_prediction = reverse_remap_labels(volume_prediction, remap_config)
+            # volume_prediction = reverse_remap_labels(volume_prediction, remap_config)
 
-            #Copy header affine
+            # Copy header affine
             if data_id == 'MALC_parcel':
                 Mat = header.get_affine()
             else:
@@ -203,23 +210,27 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
                     header['srow_x'],
                     header['srow_y'],
                     header['srow_z'],
-                    [0,0,0,1]
+                    [0, 0, 0, 1]
                 ])
             # Apply original image affine to prediction volume
             header.set_data_dtype('int16')
             nifti_img = nib.MGHImage(np.squeeze(volume_prediction), Mat, header=header)
             nib.save(nifti_img, os.path.join(prediction_path, volumes_to_use[vol_idx] + str('.mgz')))
             if logWriter:
-                logWriter.plot_dice_score('val', 'eval_dice_score', volume_dice_score, volumes_to_use[vol_idx], np.arange(0,num_classes), num_classes)
+                logWriter.plot_dice_score('val', 'eval_dice_score', volume_dice_score, volumes_to_use[vol_idx],
+                                          np.arange(0, num_classes), num_classes)
 
             volume_dice_score = volume_dice_score.cpu().numpy()
             volume_dice_score_list.append(volume_dice_score)
             log.info(volume_dice_score, np.mean(volume_dice_score))
         dice_score_arr = np.asarray(volume_dice_score_list)
-        avg_dice_score = np.mean(dice_score_arr[:,1:])
-        log.info("Mean of dice score (no background) : " + str(avg_dice_score))
-        print('Mean dice score (no background): ', avg_dice_score)
+        avg_dice_score = np.mean(dice_score_arr)
+        avg_dice_score_wo_bg = np.mean(dice_score_arr[:, 1:])
+        log.info("Mean of dice score : " + str(avg_dice_score))
+        print('Mean dice score: ', avg_dice_score)
+        print('Mean dice score without background: ', avg_dice_score_wo_bg)
         print('all dice scores: ', dice_score_arr)
+        print('class wise mean dice scores: ', np.mean(dice_score_arr, axis=0))
         class_dist = [dice_score_arr[:, c] for c in range(num_classes)]
 
         if logWriter:
@@ -231,7 +242,7 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
 
 def _segment_vol(file_path, model, orientation, batch_size, cuda_available, device):
     volume, label, header = du.load_and_preprocess_eval(file_path,
-                                                 orientation=orientation)
+                                                        orientation=orientation)
 
     volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
     volume = torch.tensor(volume).type(torch.FloatTensor)
@@ -239,7 +250,7 @@ def _segment_vol(file_path, model, orientation, batch_size, cuda_available, devi
     volume_pred = []
     for i in range(0, len(volume), batch_size):
         batch_x = volume[i: i + batch_size]
-        if cuda_available and (type(device)==int):
+        if cuda_available and (type(device) == int):
             batch_x = batch_x.cuda(device)
         out = model(batch_x)
         print(out.shape)
@@ -252,11 +263,11 @@ def _segment_vol(file_path, model, orientation, batch_size, cuda_available, devi
     volume_prediction = (volume_prediction.cpu().numpy()).astype('float32')
     volume_prediction = np.squeeze(volume_prediction)
     if orientation == "AXI":
-        volume_prediction = volume_prediction.transpose((2,1,0))
-        volume_pred = volume_pred.permute((3,1,2,0))
+        volume_prediction = volume_prediction.transpose((2, 1, 0))
+        volume_pred = volume_pred.permute((3, 1, 2, 0))
     elif orientation == "COR":
-        volume_prediction = volume_prediction.transpose((1,0,2))
-        volume_pred = volume_pred.permute((2,1,0,3))
+        volume_prediction = volume_prediction.transpose((1, 0, 2))
+        volume_pred = volume_pred.permute((2, 1, 0, 3))
 
     return volume_pred, label, volume_prediction, header
 
@@ -273,7 +284,7 @@ def _segment_vol_unc(file_path, model, orientation, batch_size, mc_samples, cuda
         volume_pred = []
         for i in range(0, len(volume), batch_size):
             batch_x = volume[i: i + batch_size]
-            if cuda_available and (type(device)==int):
+            if cuda_available and (type(device) == int):
                 batch_x = batch_x.cuda(device)
             out = model.predict(batch_x, enable_dropout=True, out_prob=True)
             # _, batch_output = torch.max(out, dim=1)
@@ -323,7 +334,8 @@ def compute_vol_bulk(prediction_dir, dir_struct, label_names, volumes_txt_file):
     log.info("**DONE**")
 
 
-def evaluate(coronal_model_path, volumes_txt_file, data_dir, label_dir, label_list, device, prediction_path, batch_size, orientation,
+def evaluate(coronal_model_path, volumes_txt_file, data_dir, label_dir, label_list, device, prediction_path, batch_size,
+             orientation,
              label_names, dir_struct, need_unc=False, mc_samples=0, exit_on_error=False):
     log.info("**Starting evaluation**")
     with open(volumes_txt_file) as file_handle:
@@ -346,9 +358,9 @@ def evaluate(coronal_model_path, volumes_txt_file, data_dir, label_dir, label_li
             # switch device to 'cpu'
             device = 'cpu'
     # If device is 'cpu' or CUDA not available
-    if (type(device)==str) or not cuda_available:
+    if (type(device) == str) or not cuda_available:
         model = torch.load(
-            coronal_model_path, 
+            coronal_model_path,
             map_location=torch.device(device)
         )
 
@@ -375,11 +387,10 @@ def evaluate(coronal_model_path, volumes_txt_file, data_dir, label_dir, label_li
                     iou_dict_list.append(iou_dict)
                 else:
                     volume_pred, label, _, header = _segment_vol(file_path, model, orientation, batch_size,
-                                                                cuda_available,
-                                                                device)
+                                                                 cuda_available,
+                                                                 device)
 
                 volume_prediction = F.softmax(volume_pred, dim=1)
-
 
                 _, volume_prediction = torch.max(volume_prediction, dim=1)
                 volume_prediction = (volume_prediction.cpu().numpy()).astype('float32')
@@ -398,7 +409,7 @@ def evaluate(coronal_model_path, volumes_txt_file, data_dir, label_dir, label_li
                 # Copy header affine
                 # if data_id == 'MALC_parcel':
                 Mat = header.get_best_affine()
-                #Mat = np.array([
+                # Mat = np.array([
                 #    header['srow_x'],
                 #    header['srow_y'],
                 #    header['srow_z'],
@@ -408,7 +419,7 @@ def evaluate(coronal_model_path, volumes_txt_file, data_dir, label_dir, label_li
                 # nifti_img = nib.Nifti1Image(volume_prediction, Mat, header=header)
                 header.set_data_dtype('int16')
                 nifti_img = nib.MGHImage(np.squeeze(volume_prediction), Mat, header=header)
-                #nib.save(nifti_img, os.path.join(prediction_path, volumes_to_use[vol_idx] + str('.nii.gz')))
+                # nib.save(nifti_img, os.path.join(prediction_path, volumes_to_use[vol_idx] + str('.nii.gz')))
 
                 log.info("Processed: " + volumes_to_use[vol_idx] + " " + str(vol_idx + 1) + " out of " + str(
                     len(file_paths)))
@@ -417,7 +428,7 @@ def evaluate(coronal_model_path, volumes_txt_file, data_dir, label_dir, label_li
                 per_volume_dict = compute_volume(volume_prediction, label_names, volumes_to_use[vol_idx])
                 volume_dict_list.append(per_volume_dict)
 
-                del volume_prediction,  volume_dice_score
+                del volume_prediction, volume_dice_score
 
             except FileNotFoundError as exp:
                 log.error("Error in reading the file ...")
@@ -445,24 +456,29 @@ def evaluate(coronal_model_path, volumes_txt_file, data_dir, label_dir, label_li
         log.info("DONE")
 
 
-def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_dir, label_dir, device, prediction_path, batch_size,
+def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_dir, label_dir, device, prediction_path,
+                  batch_size,
                   label_names, label_list, dir_struct, need_unc=False, mc_samples=0, exit_on_error=False):
     log.info("**Starting evaluation**")
 
     if dir_struct == 'KORANAKOUKB':
         file_paths = []
         volumes_to_use = []
-        for did in ['KORA','NAKO','UKB']:
-            with open(os.path.join(volumes_txt_file, did, did+'.test')) as file_handle:
+        for did in ['KORA', 'NAKO', 'UKB']:
+
+            ext = '.test'
+            if did == 'KORA':
+                ext = '.val'
+
+            with open(os.path.join(volumes_txt_file, did, did + ext)) as file_handle:
                 volumes_to_use += file_handle.read().splitlines()
-            file_paths += du.load_file_paths(data_dir, label_dir, did, os.path.join(volumes_txt_file, did, did+'.test'))
+            file_paths += du.load_file_paths(data_dir, label_dir, did, os.path.join(volumes_txt_file, did, did + ext))
     else:
         with open(volumes_txt_file) as file_handle:
             volumes_to_use = file_handle.read().splitlines()
         file_paths = du.load_file_paths(data_dir, label_dir, dir_struct, volumes_txt_file)
 
-
-    #with open(volumes_txt_file) as file_handle:
+    # with open(volumes_txt_file) as file_handle:
     #    volumes_to_use = file_handle.read().splitlines()
 
     cuda_available = torch.cuda.is_available()
@@ -471,7 +487,7 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
         if cuda_available:
             model1 = torch.load(coronal_model_path)
             model2 = torch.load(axial_model_path)
-            
+
             torch.cuda.empty_cache()
             model1.cuda(device)
             model2.cuda(device)
@@ -482,13 +498,13 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
                 'investigate if this behavior is not desired.'
             )
 
-    if (type(device)==str) or not cuda_available:
+    if (type(device) == str) or not cuda_available:
         model1 = torch.load(
-            coronal_model_path, 
+            coronal_model_path,
             map_location=torch.device(device)
         )
         model2 = torch.load(
-            axial_model_path, 
+            axial_model_path,
             map_location=torch.device(device)
         )
 
@@ -521,12 +537,12 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
                     iou_dict_list.append(iou_dict)
                 else:
                     volume_prediction_cor, label_cor, _, header = _segment_vol(file_path, model1, "COR", batch_size,
-                                                                    cuda_available,
-                                                                    device)
+                                                                               cuda_available,
+                                                                               device)
                     print('segment cor')
                     volume_prediction_axi, label_axi, _, header = _segment_vol(file_path, model2, "AXI", batch_size,
-                                                                    cuda_available,
-                                                                    device)
+                                                                               cuda_available,
+                                                                               device)
                     print('segment axi')
 
                 volume_prediction_axi = F.softmax(volume_prediction_axi, dim=1)
@@ -534,9 +550,8 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
 
                 _, volume_prediction = torch.max(volume_prediction_axi + volume_prediction_cor, dim=1)
 
-
                 volume_prediction = (volume_prediction.cpu().numpy()).astype('float32')
-                #volume_prediction = reverse_remap_labels(volume_prediction, 'FS_parcel')
+                # volume_prediction = reverse_remap_labels(volume_prediction, 'FS_parcel')
 
                 label_axi = torch.from_numpy(label_axi).cuda(device)
                 volume_dice_score = dice_score_perclass(torch.from_numpy(volume_prediction).cuda(device), label_axi,
@@ -547,21 +562,21 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
                 volume_prediction = np.squeeze(volume_prediction)
                 volume_prediction = volume_prediction.astype('int')
 
-                #Copy header affine
                 # Copy header affine
-                #if data_id == 'MALC_parcel':
+                # Copy header affine
+                # if data_id == 'MALC_parcel':
                 Mat = header.get_best_affine()
-                #Mat = np.array([
+                # Mat = np.array([
                 #    header['srow_x'],
                 #    header['srow_y'],
                 #    header['srow_z'],
                 #    [0,0,0,1]
-                #])
+                # ])
                 # Apply original image affine to prediction volume
-                #nifti_img = nib.Nifti1Image(volume_prediction, Mat, header=header)
-                #header.set_data_dtype('int16')
+                # nifti_img = nib.Nifti1Image(volume_prediction, Mat, header=header)
+                # header.set_data_dtype('int16')
                 nifti_img = nib.MGHImage(np.squeeze(volume_prediction), Mat, header=header)
-                #nib.save(nifti_img, os.path.join(prediction_path, volumes_to_use[vol_idx] + str('.mgz')))
+                # nib.save(nifti_img, os.path.join(prediction_path, volumes_to_use[vol_idx] + str('.mgz')))
 
                 log.info("Processed: " + volumes_to_use[vol_idx] + " " + str(vol_idx + 1) + " out of " + str(
                     len(file_paths)))
@@ -577,18 +592,193 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
                 print("Error in reading the file ...")
                 log.exception(exp)
                 if exit_on_error:
-                    raise(exp)                
+                    raise (exp)
             except Exception as exp:
                 log.exception(exp)
                 print(exp)
                 print("other error .")
 
                 if exit_on_error:
-                    raise(exp)
+                    raise (exp)
                 # log.info("Other kind o error!")
         all_dice_scores /= len(file_paths)
         print('avg dice scores: ', all_dice_scores)
         print('mean dice: ', np.mean(all_dice_scores))
+        print('mean dice without background: ', np.mean(all_dice_scores[1:]))
+        _write_csv_table('volume_estimates.csv', prediction_path, volume_dict_list, label_names)
+
+        if need_unc == "True":
+            _write_csv_table('cvs_uncertainty.csv', prediction_path, cvs_dict_list, label_names)
+            _write_csv_table('iou_uncertainty.csv', prediction_path, iou_dict_list, label_names)
+
+    log.info("DONE")
+
+
+def evaluate3view(coronal_model_path, axial_model_path, sagittal_model_path, volumes_txt_file, data_dir, label_dir,
+                  device, prediction_path,
+                  batch_size,
+                  label_names, label_list, dir_struct, need_unc=False, mc_samples=0, exit_on_error=False):
+    log.info("**Starting evaluation**")
+
+    if dir_struct == 'KORANAKOUKB':
+        file_paths = []
+        volumes_to_use = []
+        for did in ['KORA']:
+            ext = '.test'
+            if did == 'KORA':
+                ext = '.val'
+            with open(os.path.join(volumes_txt_file, did, did + ext)) as file_handle:
+                volumes_to_use += file_handle.read().splitlines()
+            file_paths += du.load_file_paths(data_dir, label_dir, did,
+                                             os.path.join(volumes_txt_file, did, did + ext))
+    else:
+        with open(volumes_txt_file) as file_handle:
+            volumes_to_use = file_handle.read().splitlines()
+        file_paths = du.load_file_paths(data_dir, label_dir, dir_struct, volumes_txt_file)
+
+    # with open(volumes_txt_file) as file_handle:
+    #    volumes_to_use = file_handle.read().splitlines()
+
+    cuda_available = torch.cuda.is_available()
+    if type(device) == int:
+        # if CUDA available, follow through, else warn and fallback to CPU
+        if cuda_available:
+            model1 = torch.load(coronal_model_path)
+            model2 = torch.load(axial_model_path)
+            model3 = torch.load(sagittal_model_path)
+
+            torch.cuda.empty_cache()
+            model1.cuda(device)
+            model2.cuda(device)
+            model3.cuda(device)
+        else:
+            log.warning(
+                'CUDA is not available, trying with CPU.' + \
+                'This can take much longer (> 1 hour). Cancel and ' + \
+                'investigate if this behavior is not desired.'
+            )
+
+    if (type(device) == str) or not cuda_available:
+        model1 = torch.load(
+            coronal_model_path,
+            map_location=torch.device(device)
+        )
+        model2 = torch.load(
+            axial_model_path,
+            map_location=torch.device(device)
+        )
+        model3 = torch.load(
+            axial_model_path,
+            map_location=torch.device(device)
+        )
+
+    model1.eval()
+    model2.eval()
+    model3.eval()
+
+    common_utils.create_if_not(prediction_path)
+    log.info("Evaluating now...")
+
+    print(file_paths)
+
+    with torch.no_grad():
+        volume_dict_list = []
+        cvs_dict_list = []
+        iou_dict_list = []
+        all_dice_scores = np.zeros((9))
+        for vol_idx, file_path in enumerate(file_paths):
+            try:
+                if need_unc == "True":
+                    volume_prediction_cor, _, mc_pred_list_cor, header = _segment_vol_unc(file_path, model1, "COR",
+                                                                                          batch_size, mc_samples,
+                                                                                          cuda_available, device)
+                    volume_prediction_axi, _, mc_pred_list_axi, header = _segment_vol_unc(file_path, model2, "AXI",
+                                                                                          batch_size, mc_samples,
+                                                                                          cuda_available, device)
+                    volume_prediction_sag, _, mc_pred_list_sag, header = _segment_vol_unc(file_path, model3, "SAG",
+                                                                                          batch_size, mc_samples,
+                                                                                          cuda_available, device)
+                    mc_pred_list = mc_pred_list_cor + mc_pred_list_axi + mc_pred_list_sag
+                    iou_dict, cvs_dict = compute_structure_uncertainty(mc_pred_list, label_names,
+                                                                       volumes_to_use[vol_idx])
+                    cvs_dict_list.append(cvs_dict)
+                    iou_dict_list.append(iou_dict)
+                else:
+                    volume_prediction_cor, label_cor, _, header = _segment_vol(file_path, model1, "COR", batch_size,
+                                                                               cuda_available,
+                                                                               device)
+                    print('segment cor')
+                    volume_prediction_axi, label_axi, _, header = _segment_vol(file_path, model2, "AXI", batch_size,
+                                                                               cuda_available,
+                                                                               device)
+                    print('segment axi')
+                    volume_prediction_sag, label_sag, _, header = _segment_vol(file_path, model3, "SAG", batch_size,
+                                                                               cuda_available,
+                                                                               device)
+                    print('segment sag')
+
+                volume_prediction_axi = F.softmax(volume_prediction_axi, dim=1)
+                volume_prediction_cor = F.softmax(volume_prediction_cor, dim=1)
+                volume_prediction_sag = F.softmax(volume_prediction_sag, dim=1)
+
+                _, volume_prediction = torch.max(volume_prediction_axi + volume_prediction_cor + volume_prediction_sag,
+                                                 dim=1)
+
+                volume_prediction = (volume_prediction.cpu().numpy()).astype('float32')
+                # volume_prediction = reverse_remap_labels(volume_prediction, 'FS_parcel')
+
+                label_axi = torch.from_numpy(label_axi).cuda(device)
+                volume_dice_score = dice_score_perclass(torch.from_numpy(volume_prediction).cuda(device), label_axi,
+                                                        label_list, mode='eval')
+                print(volume_dice_score)
+                all_dice_scores += volume_dice_score.cpu().numpy()
+
+                volume_prediction = np.squeeze(volume_prediction)
+                volume_prediction = volume_prediction.astype('int')
+
+                # Copy header affine
+                # Copy header affine
+                # if data_id == 'MALC_parcel':
+                Mat = header.get_best_affine()
+                # Mat = np.array([
+                #    header['srow_x'],
+                #    header['srow_y'],
+                #    header['srow_z'],
+                #    [0,0,0,1]
+                # ])
+                # Apply original image affine to prediction volume
+                # nifti_img = nib.Nifti1Image(volume_prediction, Mat, header=header)
+                # header.set_data_dtype('int16')
+                nifti_img = nib.MGHImage(np.squeeze(volume_prediction), Mat, header=header)
+                # nib.save(nifti_img, os.path.join(prediction_path, volumes_to_use[vol_idx] + str('.mgz')))
+
+                log.info("Processed: " + volumes_to_use[vol_idx] + " " + str(vol_idx + 1) + " out of " + str(
+                    len(file_paths)))
+                nib.save(nifti_img, os.path.join(prediction_path, volumes_to_use[vol_idx] + str('.nii.gz')))
+
+                per_volume_dict = compute_volume(volume_prediction, label_names, volumes_to_use[vol_idx])
+                volume_dict_list.append(per_volume_dict)
+
+                del volume_prediction, volume_prediction_axi, volume_dice_score, volume_prediction_cor
+
+            except FileNotFoundError as exp:
+                log.error("Error in reading the file ...")
+                print("Error in reading the file ...")
+                log.exception(exp)
+                if exit_on_error:
+                    raise (exp)
+            except Exception as exp:
+                log.exception(exp)
+                print(exp)
+                print("other error .")
+
+                if exit_on_error:
+                    raise (exp)
+                # log.info("Other kind o error!")
+        all_dice_scores /= len(file_paths)
+        print('avg dice scores: ', all_dice_scores)
+        print('mean dice: ', np.mean(all_dice_scores))
+        print('mean dice without background: ', np.mean(all_dice_scores[1:]))
         _write_csv_table('volume_estimates.csv', prediction_path, volume_dict_list, label_names)
 
         if need_unc == "True":

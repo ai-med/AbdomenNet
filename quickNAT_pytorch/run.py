@@ -1,7 +1,7 @@
 import argparse
 import os
 import torch
-import utils.evaluator as eu
+from utils.evaluator import evaluate, evaluate2view, evaluate_dice_score, compute_vol_bulk, evaluate3view
 from quicknat import QuickNat
 from fastSurferCNN import FastSurferCNN
 from settings import Settings
@@ -83,7 +83,7 @@ def evaluate(eval_params, net_params, data_params, common_params, train_params):
     multi_channel = data_params['use_3channel']
     logWriter = LogWriter(num_classes, log_dir, exp_name, labels=labels)
 
-    avg_dice_score, class_dist = eu.evaluate_dice_score(eval_model_path,
+    avg_dice_score, class_dist = evaluate_dice_score(eval_model_path,
                                                         num_classes,
                                                         data_dir,
                                                         label_dir,
@@ -118,7 +118,7 @@ def evaluate_bulk(eval_bulk):
     if eval_bulk['view_agg'] == 'True':
         coronal_model_path = eval_bulk['coronal_model_path']
         axial_model_path = eval_bulk['axial_model_path']
-        eu.evaluate2view(
+        evaluate2view(
                         coronal_model_path,
                          axial_model_path,
                          volumes_txt_file,
@@ -131,9 +131,27 @@ def evaluate_bulk(eval_bulk):
                          need_unc,
                          mc_samples,
                          exit_on_error=exit_on_error)
+    elif eval_bulk['3view_agg'] == 'True':
+        coronal_model_path = eval_bulk['coronal_model_path']
+        axial_model_path = eval_bulk['axial_model_path']
+        sagittal_model_path = eval_bulk['sagittal_model_path']
+        evaluate3view(
+            coronal_model_path,
+            axial_model_path,
+            sagittal_model_path,
+            volumes_txt_file,
+            data_dir, label_dir, device,
+            prediction_path,
+            batch_size,
+            label_names,
+            label_list,
+            dir_struct,
+            need_unc,
+            mc_samples,
+            exit_on_error=exit_on_error)
     else:
         coronal_model_path = eval_bulk['coronal_model_path']
-        eu.evaluate(coronal_model_path,
+        evaluate(coronal_model_path,
                     volumes_txt_file,
                     data_dir,
                     label_dir, label_list,
@@ -152,7 +170,7 @@ def compute_vol(eval_bulk):
     label_names = ['liver', 'spleen', 'kidney_r', 'kidney_l', 'adrenal_r', 'adrenal_l', 'pancreas', 'gallbladder']
     volumes_txt_file = eval_bulk['volumes_txt_file']
 
-    eu.compute_vol_bulk(prediction_path, "Linear", label_names, volumes_txt_file)
+    compute_vol_bulk(prediction_path, "Linear", label_names, volumes_txt_file)
 
 
 
@@ -189,7 +207,7 @@ if __name__ == '__main__':
         if args.setting_path is not None:
             settings_eval = Settings(args.setting_path)
         else:
-            settings_eval = Settings('settings_eval_merged.ini')
+            settings_eval = Settings('settings_merged.ini')
         evaluate_bulk(settings_eval['EVAL_BULK'])
     elif args.mode == 'clear':
         shutil.rmtree(os.path.join(common_params['exp_dir'], train_params['exp_name']))
