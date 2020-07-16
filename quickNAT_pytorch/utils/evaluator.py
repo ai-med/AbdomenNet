@@ -7,7 +7,7 @@ import torch
 import csv
 import utils.common_utils as common_utils
 import utils.data_utils as du
-from utils.preprocessor import rotate_orientation
+from .preprocessor import rotate_orientation
 import torch.nn.functional as F
 
 log = logging.getLogger(__name__)
@@ -197,8 +197,10 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
                 new_orientation = 'COR'
             else:
                 new_orientation = 'SAG'
-            _, volume_prediction = rotate_orientation(volume[:, 0, :, :].numpy(), volume_prediction,
-                                                      orientation=new_orientation)
+
+            print(new_orientation)
+            volume_prediction = rotate_orientation(volume_prediction, new_orientation)
+            print("evaluator here")
             # reverse remap labels, to be able to compare output to freesurfer GT
             # volume_prediction = reverse_remap_labels(volume_prediction, remap_config)
 
@@ -240,8 +242,18 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
     return avg_dice_score, class_dist
 
 
-def _segment_vol(file_path, model, orientation, batch_size, cuda_available, device):
-    volume, label, header = du.load_and_preprocess_eval(file_path,
+def _segment_vol(file_path, model, orientation, batch_size, cuda_available, device, multi_channel=False, remap_config=None):
+    if multi_channel:
+        volume, fat, water, label, class_weights, weights, header = du.load_and_preprocess_3channel(file_path,
+                                                                                                       orientation=orientation,
+                                                                                                       remap_config=remap_config)
+        volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
+        fat = fat if len(fat.shape) == 4 else fat[:, np.newaxis, :, :]
+        water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
+        volume, fat, water = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(fat).type(
+            torch.FloatTensor), torch.tensor(water).type(torch.FloatTensor)
+    else:
+        volume, label, header = du.load_and_preprocess_eval(file_path,
                                                         orientation=orientation)
 
     volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
@@ -249,7 +261,12 @@ def _segment_vol(file_path, model, orientation, batch_size, cuda_available, devi
 
     volume_pred = []
     for i in range(0, len(volume), batch_size):
-        batch_x = volume[i: i + batch_size]
+        if multi_channel:
+            batch_x = torch.cat((volume[i: i + batch_size], fat[i: i + batch_size], water[i: i + batch_size]),
+                                         dim=1)
+        else:
+            batch_x = volume[i: i + batch_size]
+
         if cuda_available and (type(device) == int):
             batch_x = batch_x.cuda(device)
         out = model(batch_x)
@@ -458,7 +475,7 @@ def evaluate(coronal_model_path, volumes_txt_file, data_dir, label_dir, label_li
 
 def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_dir, label_dir, device, prediction_path,
                   batch_size,
-                  label_names, label_list, dir_struct, need_unc=False, mc_samples=0, exit_on_error=False):
+                  label_names, label_list, dir_struct, need_unc=False, mc_samples=0, exit_on_error=False, multi_channel=False):
     log.info("**Starting evaluation**")
 
     if dir_struct == 'KORANAKOUKB':
@@ -476,12 +493,16 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
     else:
         with open(volumes_txt_file) as file_handle:
             volumes_to_use = file_handle.read().splitlines()
-        file_paths = du.load_file_paths(data_dir, label_dir, dir_struct, volumes_txt_file)
+        if multi_channel:
+            file_paths = du.load_file_paths_3channel(data_dir, label_dir, dir_struct, volumes_txt_file)
+        else:
+            file_paths = du.load_file_paths(data_dir, label_dir, dir_struct, volumes_txt_file)
 
     # with open(volumes_txt_file) as file_handle:
     #    volumes_to_use = file_handle.read().splitlines()
 
     cuda_available = torch.cuda.is_available()
+    print(coronal_model_path, axial_model_path)
     if type(device) == int:
         # if CUDA available, follow through, else warn and fallback to CPU
         if cuda_available:
@@ -522,7 +543,7 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
         iou_dict_list = []
         all_dice_scores = np.zeros((9))
         for vol_idx, file_path in enumerate(file_paths):
-            try:
+            # try:
                 if need_unc == "True":
                     volume_prediction_cor, _, mc_pred_list_cor, header = _segment_vol_unc(file_path, model1, "COR",
                                                                                           batch_size, mc_samples,
@@ -538,11 +559,11 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
                 else:
                     volume_prediction_cor, label_cor, _, header = _segment_vol(file_path, model1, "COR", batch_size,
                                                                                cuda_available,
-                                                                               device)
+                                                                               device, multi_channel)
                     print('segment cor')
-                    volume_prediction_axi, label_axi, _, header = _segment_vol(file_path, model2, "AXI", batch_size,
+                    volume_prediction_axi, label_axi, _, header = _segment_vol(file_path, model2, "SAG", batch_size,
                                                                                cuda_available,
-                                                                               device)
+                                                                               device, multi_channel)
                     print('segment axi')
 
                 volume_prediction_axi = F.softmax(volume_prediction_axi, dim=1)
@@ -587,19 +608,19 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
 
                 del volume_prediction, volume_prediction_axi, volume_dice_score, volume_prediction_cor
 
-            except FileNotFoundError as exp:
-                log.error("Error in reading the file ...")
-                print("Error in reading the file ...")
-                log.exception(exp)
-                if exit_on_error:
-                    raise (exp)
-            except Exception as exp:
-                log.exception(exp)
-                print(exp)
-                print("other error .")
-
-                if exit_on_error:
-                    raise (exp)
+            # except FileNotFoundError as exp:
+            #     log.error("Error in reading the file ...")
+            #     print("Error in reading the file ...")
+            #     log.exception(exp)
+            #     if exit_on_error:
+            #         raise (exp)
+            # except Exception as exp:
+            #     log.exception(exp)
+            #     print(exp)
+            #     print("other error .")
+            #
+            #     if exit_on_error:
+            #         raise (exp)
                 # log.info("Other kind o error!")
         all_dice_scores /= len(file_paths)
         print('avg dice scores: ', all_dice_scores)
@@ -617,7 +638,7 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
 def evaluate3view(coronal_model_path, axial_model_path, sagittal_model_path, volumes_txt_file, data_dir, label_dir,
                   device, prediction_path,
                   batch_size,
-                  label_names, label_list, dir_struct, need_unc=False, mc_samples=0, exit_on_error=False):
+                  label_names, label_list, dir_struct, need_unc=False, mc_samples=0, exit_on_error=False, multi_channel=False):
     log.info("**Starting evaluation**")
 
     if dir_struct == 'KORANAKOUKB':
@@ -634,7 +655,11 @@ def evaluate3view(coronal_model_path, axial_model_path, sagittal_model_path, vol
     else:
         with open(volumes_txt_file) as file_handle:
             volumes_to_use = file_handle.read().splitlines()
-        file_paths = du.load_file_paths(data_dir, label_dir, dir_struct, volumes_txt_file)
+
+        if multi_channel:
+            file_paths = du.load_file_paths_3channel(data_dir, label_dir, dir_struct, volumes_txt_file)
+        else:
+            file_paths = du.load_file_paths(data_dir, label_dir, dir_struct, volumes_txt_file)
 
     # with open(volumes_txt_file) as file_handle:
     #    volumes_to_use = file_handle.read().splitlines()

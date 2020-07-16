@@ -227,8 +227,8 @@ def preprocess_3channel(volume, fat, water, labelmap, remap_config, reduce_slice
     #if remap_config:
     #    labelmap = preprocessor.remap_labels(labelmap, remap_config)
 
-    if remove_black:
-        volume, fat,water, labelmap = preprocessor.remove_black_3channels(volume, labelmap)
+    # if remove_black:
+    #     volume, fat,water, labelmap = preprocessor.remove_black_3channels(volume, labelmap)
 
     if return_weights:
         class_weights, weights = preprocessor.estimate_weights_mfb(labelmap)

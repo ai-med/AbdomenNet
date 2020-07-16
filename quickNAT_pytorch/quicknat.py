@@ -26,7 +26,7 @@ class QuickNat(nn.Module):
                         'drop_out':0.2}
         """
         super(QuickNat, self).__init__()
-
+        print("NUMBER OF CHANNEL", params['num_channels'])
         self.encode1 = sm.EncoderBlock(params, se_block_type=se.SELayer(params['se_block']))
         params['num_channels'] = params['num_filters']
         self.encode2 = sm.EncoderBlock(params, se_block_type=se.SELayer(params['se_block']))

@@ -110,6 +110,8 @@ def evaluate_bulk(eval_bulk):
     need_unc = eval_bulk['estimate_uncertainty']
     mc_samples = eval_bulk['mc_samples']
     dir_struct = eval_bulk['directory_struct']
+    multi_channel = data_params['use_3channel']
+
     if 'exit_on_error' in eval_bulk.keys():
         exit_on_error = eval_bulk['exit_on_error']
     else:
@@ -119,18 +121,20 @@ def evaluate_bulk(eval_bulk):
         coronal_model_path = eval_bulk['coronal_model_path']
         axial_model_path = eval_bulk['axial_model_path']
         evaluate2view(
-                        coronal_model_path,
-                         axial_model_path,
-                         volumes_txt_file,
-                         data_dir, label_dir, device,
-                         prediction_path,
-                         batch_size,
-                         label_names,
-                         label_list,
-                         dir_struct,
-                         need_unc,
-                         mc_samples,
-                         exit_on_error=exit_on_error)
+            coronal_model_path,
+            axial_model_path,
+            volumes_txt_file,
+            data_dir, label_dir, device,
+            prediction_path,
+            batch_size,
+            label_names,
+            label_list,
+            dir_struct,
+            need_unc,
+            mc_samples,
+            exit_on_error=exit_on_error,
+            multi_channel=multi_channel
+        )
     elif eval_bulk['3view_agg'] == 'True':
         coronal_model_path = eval_bulk['coronal_model_path']
         axial_model_path = eval_bulk['axial_model_path']
@@ -148,22 +152,27 @@ def evaluate_bulk(eval_bulk):
             dir_struct,
             need_unc,
             mc_samples,
-            exit_on_error=exit_on_error)
+            exit_on_error=exit_on_error,
+            multi_channel=multi_channel
+        )
     else:
         coronal_model_path = eval_bulk['coronal_model_path']
-        evaluate(coronal_model_path,
-                    volumes_txt_file,
-                    data_dir,
-                    label_dir, label_list,
-                    device,
-                    prediction_path,
-                    batch_size,
-                    "COR",
-                    label_names,
-                    dir_struct,
-                    need_unc,
-                    mc_samples,
-                    exit_on_error=exit_on_error)
+        evaluate(
+            coronal_model_path,
+            volumes_txt_file,
+            data_dir,
+            label_dir, label_list,
+            device,
+            prediction_path,
+            batch_size,
+            "COR",
+            label_names,
+            dir_struct,
+            need_unc,
+            mc_samples,
+            exit_on_error=exit_on_error,
+            multi_channel=multi_channel
+        )
 
 def compute_vol(eval_bulk):
     prediction_path = eval_bulk['save_predictions_dir']
@@ -207,7 +216,7 @@ if __name__ == '__main__':
         if args.setting_path is not None:
             settings_eval = Settings(args.setting_path)
         else:
-            settings_eval = Settings('settings_merged.ini')
+            settings_eval = Settings('settings_kora.ini')
         evaluate_bulk(settings_eval['EVAL_BULK'])
     elif args.mode == 'clear':
         shutil.rmtree(os.path.join(common_params['exp_dir'], train_params['exp_name']))

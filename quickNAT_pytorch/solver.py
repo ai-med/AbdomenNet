@@ -156,6 +156,7 @@ class Solver(object):
                     out_arr, y_arr = torch.cat(out_list), torch.cat(y_list)
                     self.logWriter.loss_per_epoch(loss_arr, phase, epoch)
                     index = np.random.choice(len(dataloaders[phase].dataset.X), 3, replace=False)
+                    print("index")
                     #self.logWriter.image_per_epoch(model.predict(dataloaders[phase].dataset.X[index], self.device),
                     #                               dataloaders[phase].dataset.y[index], phase, epoch)
                     self.logWriter.cm_per_epoch(phase, out_arr, y_arr, epoch)
