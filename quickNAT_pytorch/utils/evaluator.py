@@ -279,14 +279,19 @@ def _segment_vol(file_path, model, orientation, batch_size, cuda_available, devi
 
     volume_prediction = (volume_prediction.cpu().numpy()).astype('float32')
     volume_prediction = np.squeeze(volume_prediction)
+    # volume_prediction = rotate_orientation(volume_prediction, orientation)
     if orientation == "AXI":
         volume_prediction = volume_prediction.transpose((2, 1, 0))
+        reference_label = label.transpose((2, 1, 0))
         volume_pred = volume_pred.permute((3, 1, 2, 0))
     elif orientation == "COR":
         volume_prediction = volume_prediction.transpose((1, 0, 2))
+        reference_label = label.transpose((1, 0, 2))
         volume_pred = volume_pred.permute((2, 1, 0, 3))
+    else:
+        reference_label = label
 
-    return volume_pred, label, volume_prediction, header
+    return volume_pred, reference_label, volume_prediction, header
 
 
 def _segment_vol_unc(file_path, model, orientation, batch_size, mc_samples, cuda_available, device):
@@ -547,21 +552,21 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
                 if need_unc == "True":
                     volume_prediction_cor, _, mc_pred_list_cor, header = _segment_vol_unc(file_path, model1, "COR",
                                                                                           batch_size, mc_samples,
-                                                                                          cuda_available, device)
+                                                                                          cuda_available, device, multi_channel)
                     volume_prediction_axi, _, mc_pred_list_axi, header = _segment_vol_unc(file_path, model2, "AXI",
                                                                                           batch_size, mc_samples,
-                                                                                          cuda_available, device)
+                                                                                          cuda_available, device, multi_channel)
                     mc_pred_list = mc_pred_list_cor + mc_pred_list_axi
                     iou_dict, cvs_dict = compute_structure_uncertainty(mc_pred_list, label_names,
                                                                        volumes_to_use[vol_idx])
                     cvs_dict_list.append(cvs_dict)
                     iou_dict_list.append(iou_dict)
                 else:
-                    volume_prediction_cor, label_cor, _, header = _segment_vol(file_path, model1, "COR", batch_size,
+                    volume_prediction_cor, reference_label, _, header = _segment_vol(file_path, model1, "COR", batch_size,
                                                                                cuda_available,
                                                                                device, multi_channel)
                     print('segment cor')
-                    volume_prediction_axi, label_axi, _, header = _segment_vol(file_path, model2, "SAG", batch_size,
+                    volume_prediction_axi, reference_label, _, header = _segment_vol(file_path, model2, "AXI", batch_size,
                                                                                cuda_available,
                                                                                device, multi_channel)
                     print('segment axi')
@@ -574,8 +579,8 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
                 volume_prediction = (volume_prediction.cpu().numpy()).astype('float32')
                 # volume_prediction = reverse_remap_labels(volume_prediction, 'FS_parcel')
 
-                label_axi = torch.from_numpy(label_axi).cuda(device)
-                volume_dice_score = dice_score_perclass(torch.from_numpy(volume_prediction).cuda(device), label_axi,
+                reference_label = torch.from_numpy(reference_label).cuda(device)
+                volume_dice_score = dice_score_perclass(torch.from_numpy(volume_prediction).cuda(device), reference_label,
                                                         label_list, mode='eval')
                 print(volume_dice_score)
                 all_dice_scores += volume_dice_score.cpu().numpy()
@@ -712,34 +717,33 @@ def evaluate3view(coronal_model_path, axial_model_path, sagittal_model_path, vol
         iou_dict_list = []
         all_dice_scores = np.zeros((9))
         for vol_idx, file_path in enumerate(file_paths):
-            try:
+            # try:
                 if need_unc == "True":
                     volume_prediction_cor, _, mc_pred_list_cor, header = _segment_vol_unc(file_path, model1, "COR",
                                                                                           batch_size, mc_samples,
-                                                                                          cuda_available, device)
+                                                                                          cuda_available, device, multi_channel)
                     volume_prediction_axi, _, mc_pred_list_axi, header = _segment_vol_unc(file_path, model2, "AXI",
                                                                                           batch_size, mc_samples,
-                                                                                          cuda_available, device)
+                                                                                          cuda_available, device, multi_channel)
                     volume_prediction_sag, _, mc_pred_list_sag, header = _segment_vol_unc(file_path, model3, "SAG",
                                                                                           batch_size, mc_samples,
-                                                                                          cuda_available, device)
+                                                                                          cuda_available, device, multi_channel)
                     mc_pred_list = mc_pred_list_cor + mc_pred_list_axi + mc_pred_list_sag
                     iou_dict, cvs_dict = compute_structure_uncertainty(mc_pred_list, label_names,
                                                                        volumes_to_use[vol_idx])
                     cvs_dict_list.append(cvs_dict)
                     iou_dict_list.append(iou_dict)
                 else:
-                    volume_prediction_cor, label_cor, _, header = _segment_vol(file_path, model1, "COR", batch_size,
-                                                                               cuda_available,
-                                                                               device)
+                    volume_prediction_cor, reference_label, _, header = _segment_vol(file_path, model1, "COR", batch_size, cuda_available, device, multi_channel)
                     print('segment cor')
-                    volume_prediction_axi, label_axi, _, header = _segment_vol(file_path, model2, "AXI", batch_size,
+                    # volume_pred, label, volume_prediction, header
+                    volume_prediction_axi, reference_label, _, header = _segment_vol(file_path, model2, "AXI", batch_size,
                                                                                cuda_available,
-                                                                               device)
+                                                                               device, multi_channel)
                     print('segment axi')
-                    volume_prediction_sag, label_sag, _, header = _segment_vol(file_path, model3, "SAG", batch_size,
+                    volume_prediction_sag, reference_label, _, header = _segment_vol(file_path, model3, "SAG", batch_size,
                                                                                cuda_available,
-                                                                               device)
+                                                                               device, multi_channel)
                     print('segment sag')
 
                 volume_prediction_axi = F.softmax(volume_prediction_axi, dim=1)
@@ -752,8 +756,8 @@ def evaluate3view(coronal_model_path, axial_model_path, sagittal_model_path, vol
                 volume_prediction = (volume_prediction.cpu().numpy()).astype('float32')
                 # volume_prediction = reverse_remap_labels(volume_prediction, 'FS_parcel')
 
-                label_axi = torch.from_numpy(label_axi).cuda(device)
-                volume_dice_score = dice_score_perclass(torch.from_numpy(volume_prediction).cuda(device), label_axi,
+                reference_label = torch.from_numpy(reference_label).cuda(device)
+                volume_dice_score = dice_score_perclass(torch.from_numpy(volume_prediction).cuda(device), reference_label,
                                                         label_list, mode='eval')
                 print(volume_dice_score)
                 all_dice_scores += volume_dice_score.cpu().numpy()
@@ -786,19 +790,19 @@ def evaluate3view(coronal_model_path, axial_model_path, sagittal_model_path, vol
 
                 del volume_prediction, volume_prediction_axi, volume_dice_score, volume_prediction_cor
 
-            except FileNotFoundError as exp:
-                log.error("Error in reading the file ...")
-                print("Error in reading the file ...")
-                log.exception(exp)
-                if exit_on_error:
-                    raise (exp)
-            except Exception as exp:
-                log.exception(exp)
-                print(exp)
-                print("other error .")
-
-                if exit_on_error:
-                    raise (exp)
+            # except FileNotFoundError as exp:
+            #     log.error("Error in reading the file ...")
+            #     print("Error in reading the file ...")
+            #     log.exception(exp)
+            #     if exit_on_error:
+            #         raise (exp)
+            # except Exception as exp:
+            #     log.exception(exp)
+            #     print(exp)
+            #     print("other error .")
+            #
+            #     if exit_on_error:
+            #         raise (exp)
                 # log.info("Other kind o error!")
         all_dice_scores /= len(file_paths)
         print('avg dice scores: ', all_dice_scores)

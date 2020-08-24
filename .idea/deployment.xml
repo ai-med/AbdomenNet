@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="abhijit@138.246.223.54:22" createEmptyFolders="true">
+    <serverData>
+      <paths name="abhijit@138.246.223.54:22">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/Jyotirmay/abdominal_segmentation" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="abhijit@138.246.223.54:22 password">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/Jyotirmay/abdominal_segmentation" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>
