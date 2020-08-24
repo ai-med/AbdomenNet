@@ -291,7 +291,7 @@ def _segment_vol(file_path, model, orientation, batch_size, cuda_available, devi
     else:
         reference_label = label
 
-    return volume_pred, reference_label, volume_prediction, header
+    return volume_pred, (label, reference_label), volume_prediction, header
 
 
 def _segment_vol_unc(file_path, model, orientation, batch_size, mc_samples, cuda_available, device):
@@ -562,14 +562,17 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
                     cvs_dict_list.append(cvs_dict)
                     iou_dict_list.append(iou_dict)
                 else:
-                    volume_prediction_cor, reference_label, _, header = _segment_vol(file_path, model1, "COR", batch_size,
+                    volume_prediction_cor, (label, reference_label), _, header = _segment_vol(file_path, model1, "COR", batch_size,
                                                                                cuda_available,
                                                                                device, multi_channel)
                     print('segment cor')
-                    volume_prediction_axi, reference_label, _, header = _segment_vol(file_path, model2, "AXI", batch_size,
+                    volume_prediction_axi, (label, reference_label), _, header = _segment_vol(file_path, model2, "AXI", batch_size,
                                                                                cuda_available,
                                                                                device, multi_channel)
                     print('segment axi')
+                print(volume_prediction_cor.shape, volume_prediction_axi.shape, label.shape, reference_label.shape)
+                if not multi_channel:
+                    reference_label = label
 
                 volume_prediction_axi = F.softmax(volume_prediction_axi, dim=1)
                 volume_prediction_cor = F.softmax(volume_prediction_cor, dim=1)
@@ -734,14 +737,14 @@ def evaluate3view(coronal_model_path, axial_model_path, sagittal_model_path, vol
                     cvs_dict_list.append(cvs_dict)
                     iou_dict_list.append(iou_dict)
                 else:
-                    volume_prediction_cor, reference_label, _, header = _segment_vol(file_path, model1, "COR", batch_size, cuda_available, device, multi_channel)
+                    volume_prediction_cor, (label, reference_label), _, header = _segment_vol(file_path, model1, "COR", batch_size, cuda_available, device, multi_channel)
                     print('segment cor')
                     # volume_pred, label, volume_prediction, header
-                    volume_prediction_axi, reference_label, _, header = _segment_vol(file_path, model2, "AXI", batch_size,
+                    volume_prediction_axi, (label, reference_label), _, header = _segment_vol(file_path, model2, "AXI", batch_size,
                                                                                cuda_available,
                                                                                device, multi_channel)
                     print('segment axi')
-                    volume_prediction_sag, reference_label, _, header = _segment_vol(file_path, model3, "SAG", batch_size,
+                    volume_prediction_sag, (label, reference_label), _, header = _segment_vol(file_path, model3, "SAG", batch_size,
                                                                                cuda_available,
                                                                                device, multi_channel)
                     print('segment sag')
