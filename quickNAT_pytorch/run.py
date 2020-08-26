@@ -6,7 +6,7 @@ from quicknat import QuickNat
 from fastSurferCNN import FastSurferCNN
 from settings import Settings
 from solver import Solver
-from utils.data_utils import get_imdb_dataset, get_imdb_dataset_3channel
+from utils.data_utils import get_imdb_dataset, get_imdb_dataset_3channel, get_imdb_dataset_2channel
 from utils.log_utils import LogWriter
 import logging
 import shutil
@@ -18,6 +18,8 @@ def load_data(data_params):
     print("Loading dataset")
     if data_params['use_3channel'] == True:
         train_data, test_data = get_imdb_dataset_3channel(data_params)
+    elif data_params['use_2channel'] == True:
+        train_data, test_data = get_imdb_dataset_2channel(data_params)
     else:
         train_data, test_data = get_imdb_dataset(data_params)
     print("Train size: %i" % len(train_data))
@@ -80,7 +82,7 @@ def evaluate(eval_params, net_params, data_params, common_params, train_params):
     prediction_path = os.path.join(exp_dir, exp_name, save_predictions_dir)
     orientation = eval_params['orientation']
     data_id = eval_params['data_id']
-    multi_channel = False # data_params['use_3channel']
+    multi_channel = data_params['use_3channel']
     logWriter = LogWriter(num_classes, log_dir, exp_name, labels=labels)
 
     avg_dice_score, class_dist = evaluate_dice_score(eval_model_path,

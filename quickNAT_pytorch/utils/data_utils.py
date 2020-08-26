@@ -56,6 +56,30 @@ class ImdbData_3channel(data.Dataset):
     def __len__(self):
         return len(self.y)
 
+class ImdbData_2channel(data.Dataset):
+    def __init__(self, X, X2, y, w, wd, transforms=None):
+        self.X = X if len(X.shape) == 4 else X[:, np.newaxis, :, :]
+        self.X2 = X2 if len(X2.shape) == 4 else X2[:, np.newaxis, :, :]
+        # self.X3 = X3 if len(X3.shape) == 4 else X3[:, np.newaxis, :, :]
+        self.y = y
+        self.w = w
+        self.wd = wd
+        self.transforms = transforms
+
+
+    def __getitem__(self, index):
+        img1 = torch.from_numpy(self.X[index])
+        img2 = torch.from_numpy(self.X2[index])
+        # img3 = torch.from_numpy(self.X3[index])
+        img = torch.cat([img1,img2], dim=0)
+        label = torch.from_numpy(self.y[index])
+        weight = torch.from_numpy(self.w[index])
+        dice_weight = torch.from_numpy(self.wd[index])
+        return img, label, weight, dice_weight
+
+    def __len__(self):
+        return len(self.y)
+
 def get_imdb_dataset_3channel(data_params):
     data_train = h5py.File(os.path.join(data_params['data_dir'], data_params['train_data_file']), 'r')
     fat_train = h5py.File(os.path.join(data_params['data_dir'], data_params['train_data_fat_file']), 'r')
@@ -73,6 +97,26 @@ def get_imdb_dataset_3channel(data_params):
 
     return (ImdbData_3channel(data_train['data'][()],fat_train['data'][()],water_train['data'][()], label_train['label'][()], class_weight_train['class_weights'][()], weight_train['weights'][()]),
             ImdbData_3channel(data_test['data'][()],fat_test['data'][()],water_test['data'][()], label_test['label'][()], class_weight_test['class_weights'][()], weight_test['weights'][()]))
+
+
+def get_imdb_dataset_2channel(data_params):
+    data_train = h5py.File(os.path.join(data_params['data_dir'], data_params['train_data_file']), 'r')
+    # fat_train = h5py.File(os.path.join(data_params['data_dir'], data_params['train_data_fat_file']), 'r')
+    water_train = h5py.File(os.path.join(data_params['data_dir'], data_params['train_data_water_file']), 'r')
+    label_train = h5py.File(os.path.join(data_params['data_dir'], data_params['train_label_file']), 'r')
+    class_weight_train = h5py.File(os.path.join(data_params['data_dir'], data_params['train_class_weights_file']), 'r')
+    weight_train = h5py.File(os.path.join(data_params['data_dir'], data_params['train_weights_file']), 'r')
+
+    data_test = h5py.File(os.path.join(data_params['data_dir'], data_params['test_data_file']), 'r')
+    # fat_test = h5py.File(os.path.join(data_params['data_dir'], data_params['test_data_fat_file']), 'r')
+    water_test = h5py.File(os.path.join(data_params['data_dir'], data_params['test_data_water_file']), 'r')
+    label_test = h5py.File(os.path.join(data_params['data_dir'], data_params['test_label_file']), 'r')
+    class_weight_test = h5py.File(os.path.join(data_params['data_dir'], data_params['test_class_weights_file']), 'r')
+    weight_test = h5py.File(os.path.join(data_params['data_dir'], data_params['test_weights_file']), 'r')
+
+    return (ImdbData_2channel(data_train['data'][()],water_train['data'][()], label_train['label'][()], class_weight_train['class_weights'][()], weight_train['weights'][()]),
+            ImdbData_2channel(data_test['data'][()],water_test['data'][()], label_test['label'][()], class_weight_test['class_weights'][()], weight_test['weights'][()]))
+
 
 def get_imdb_dataset(data_params):
     data_train = h5py.File(os.path.join(data_params['data_dir'], data_params['train_data_file']), 'r')
@@ -123,6 +167,7 @@ def load_dataset_3channel(file_paths,
     else:
         return volume_list,fat_list, water_list, labelmap_list, headers
 
+
 def load_dataset(file_paths,
                  orientation,
                  remap_config,
@@ -154,6 +199,7 @@ def load_dataset(file_paths,
         return volume_list, labelmap_list, class_weights_list, weights_list, headers
     else:
         return volume_list, labelmap_list, headers
+
 
 def load_and_preprocess_3channel(file_path, orientation, remap_config, reduce_slices=False,
                         remove_black=False,
@@ -211,6 +257,20 @@ def load_data_3channel(file_path, orientation):
     water = preprocessor.rotate_orientation(water, orientation)
     labelmap = preprocessor.rotate_orientation(labelmap, orientation)
     return volume, fat, water, labelmap, volume_nifty.header
+
+
+def load_data_2channel(file_path, orientation):
+    volume_nifty, volume_water_nifty, labelmap_nifty = nb.load(file_path[0]),nb.load(file_path[2]), nb.load(file_path[3])
+    volume, water, labelmap = volume_nifty.get_fdata(),volume_water_nifty.get_fdata(), labelmap_nifty.get_fdata()
+    volume = (volume - np.min(volume)) / (np.max(volume) - np.min(volume))
+    # fat = (fat - np.min(fat)) / (np.max(fat) - np.min(fat))
+    water = (water - np.min(water)) / (np.max(water) - np.min(water))
+
+    volume = preprocessor.rotate_orientation(volume, orientation)
+    # fat = preprocessor.rotate_orientation(fat, orientation)
+    water = preprocessor.rotate_orientation(water, orientation)
+    labelmap = preprocessor.rotate_orientation(labelmap, orientation)
+    return volume, water, labelmap, volume_nifty.header
 
 def load_data(file_path, orientation):
     volume_nifty, labelmap_nifty = nb.load(file_path[0]), nb.load(file_path[1])
