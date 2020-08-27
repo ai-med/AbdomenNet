@@ -201,6 +201,19 @@ def load_dataset(file_paths,
         return volume_list, labelmap_list, headers
 
 
+def load_and_preprocess_2channel(file_path, orientation, remap_config, reduce_slices=False,
+                        remove_black=False,
+                        return_weights=False):
+    #print(file_path)
+    volume, water, labelmap, header = load_data_2channel(file_path, orientation)
+
+    volume, water, labelmap, class_weights, weights = preprocess_2channel(volume, water,labelmap, remap_config=remap_config,
+                                                          reduce_slices=reduce_slices,
+                                                          remove_black=remove_black,
+                                                          return_weights=return_weights)
+    return volume, water, labelmap, class_weights, weights, header
+
+
 def load_and_preprocess_3channel(file_path, orientation, remap_config, reduce_slices=False,
                         remove_black=False,
                         return_weights=False):
@@ -282,7 +295,7 @@ def load_data(file_path, orientation):
 
 def preprocess_3channel(volume, fat, water, labelmap, remap_config, reduce_slices=False, remove_black=False, return_weights=False):
     if reduce_slices:
-        volume,fat,water, labelmap = preprocessor.reduce_slices_3channel(volume, labelmap)
+        volume,fat,water, labelmap = preprocessor.reduce_slices_3channel(volume, fat, water, labelmap)
 
     #if remap_config:
     #    labelmap = preprocessor.remap_labels(labelmap, remap_config)
@@ -295,6 +308,24 @@ def preprocess_3channel(volume, fat, water, labelmap, remap_config, reduce_slice
         return volume, fat, water, labelmap, class_weights, weights
     else:
         return volume, fat, water, labelmap, None, None
+
+
+def preprocess_2channel(volume, water, labelmap, remap_config, reduce_slices=False, remove_black=False, return_weights=False):
+    if reduce_slices:
+        volume, water, labelmap = preprocessor.reduce_slices_2channel(volume, water, labelmap)
+
+    #if remap_config:
+    #    labelmap = preprocessor.remap_labels(labelmap, remap_config)
+
+    # if remove_black:
+    #     volume, fat,water, labelmap = preprocessor.remove_black_3channels(volume, labelmap)
+
+    if return_weights:
+        class_weights, weights = preprocessor.estimate_weights_mfb(labelmap)
+        return volume, water, labelmap, class_weights, weights
+    else:
+        return volume, water, labelmap, None, None
+
 
 def preprocess(volume, labelmap, remap_config, reduce_slices=False, remove_black=False, return_weights=False):
     if reduce_slices:
@@ -375,6 +406,46 @@ def load_file_paths_3channel(data_dir, label_dir, data_id, volumes_txt_file=None
         raise ValueError("Invalid entry, valid options are MALC, ADNI, CANDI and IBSR")
 
     return file_paths
+
+def load_file_paths_2channel(data_dir, label_dir, data_id, volumes_txt_file=None):
+    """
+    This function returns the file paths combined as a list where each element is a 2 element tuple, 0th being data and 1st being label.
+    It should be modified to suit the need of the project
+    :param data_dir: Directory which contains the data files
+    :param label_dir: Directory which contains the label files
+    :param data_id: A flag indicates the name of Dataset for proper file reading
+    :param volumes_txt_file: (Optional) Path to the a csv file, when provided only these data points will be read
+    :return: list of file paths as string
+    """
+
+    if volumes_txt_file:
+        with open(volumes_txt_file) as file_handle:
+            volumes_to_use = file_handle.read().splitlines()
+    else:
+        volumes_to_use = [name for name in os.listdir(data_dir)]
+    print('data id ', data_id)
+    if data_id == 'KORA':
+        file_paths = [
+            [os.path.join(data_dir, data_id, 'data', vol, 'resampled_normalized_image.nii.gz'), os.path.join(data_dir, data_id, 'data', vol, 'resampled_normalized_water.nii.gz'), os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+            for
+            vol in volumes_to_use]
+    elif data_id == 'NAKO':
+        file_paths = [
+            [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
+             os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+            for
+            vol in volumes_to_use]
+    elif data_id == 'UKB':
+        file_paths = [
+            [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
+             os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+            for
+            vol in volumes_to_use]
+    else:
+        raise ValueError("Invalid entry, valid options are MALC, ADNI, CANDI and IBSR")
+
+    return file_paths
+
 
 def load_file_paths(data_dir, label_dir, data_id, volumes_txt_file=None):
     """

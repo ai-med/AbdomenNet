@@ -98,7 +98,7 @@ def compute_structure_uncertainty(mc_pred_list, label_map, ID):
 
 
 def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_txt_file, remap_config, orientation,
-                        prediction_path, data_id, device=0, logWriter=None, mode='eval', multi_channel=False):
+                        prediction_path, data_id, device=0, logWriter=None, mode='eval', multi_channel=False, use_2channel=False):
     log.info("**Starting evaluation. Please check tensorboard for plots if a logWriter is provided in arguments**")
     batch_size = 16
 
@@ -116,7 +116,7 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
     else:
         with open(volumes_txt_file) as file_handle:
             volumes_to_use = file_handle.read().splitlines()
-        if multi_channel:
+        if multi_channel or use_2channel:
             file_paths = du.load_file_paths_3channel(data_dir, label_dir, data_id, volumes_txt_file)
 
         else:
@@ -161,6 +161,16 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
                 water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
                 volume, fat, water, labelmap = torch.tensor(volume).type(torch.FloatTensor),torch.tensor(fat).type(torch.FloatTensor), torch.tensor(water).type(torch.FloatTensor), torch.tensor(labelmap).type(
                     torch.LongTensor)
+            elif use_2channel:
+                volume, water, labelmap, class_weights, weights, header = du.load_and_preprocess_2channel(file_path,
+                                                                                          orientation=orientation,
+                                                                                          remap_config=remap_config)
+                volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
+                # fat = fat if len(fat.shape) == 4 else fat[:, np.newaxis, :, :]
+                water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
+                volume, water, labelmap = torch.tensor(volume).type(torch.FloatTensor), \
+                                          torch.tensor(water).type(torch.FloatTensor), \
+                                          torch.tensor(labelmap).type(torch.LongTensor)
             else:
                 volume, labelmap, class_weights, weights, header = du.load_and_preprocess(file_path,
                                                                                       orientation=orientation,
@@ -174,7 +184,9 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
             for i in range(0, len(volume), batch_size):
                 if multi_channel:
                     batch_x, batch_y = torch.cat((volume[i: i + batch_size],fat[i: i + batch_size],water[i: i + batch_size]),dim=1), labelmap[i:i + batch_size]
-
+                elif use_2channel:
+                    batch_x, batch_y = torch.cat(
+                        (volume[i: i + batch_size], water[i: i + batch_size]), dim=1), labelmap[i:i + batch_size]
                 else:
                     batch_x, batch_y = volume[i: i + batch_size], labelmap[i:i + batch_size]
                 if cuda_available and (type(device)==int):
@@ -242,7 +254,7 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
     return avg_dice_score, class_dist
 
 
-def _segment_vol(file_path, model, orientation, batch_size, cuda_available, device, multi_channel=False, remap_config=None):
+def _segment_vol(file_path, model, orientation, batch_size, cuda_available, device, multi_channel=False, use_2channel=False, remap_config=None):
     if multi_channel:
         volume, fat, water, label, class_weights, weights, header = du.load_and_preprocess_3channel(file_path,
                                                                                                        orientation=orientation,
@@ -252,6 +264,14 @@ def _segment_vol(file_path, model, orientation, batch_size, cuda_available, devi
         water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
         volume, fat, water = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(fat).type(
             torch.FloatTensor), torch.tensor(water).type(torch.FloatTensor)
+    elif use_2channel:
+        volume, water, label, class_weights, weights, header = du.load_and_preprocess_2channel(file_path,
+                                                                                                    orientation=orientation,
+                                                                                                    remap_config=remap_config)
+        volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
+        # fat = fat if len(fat.shape) == 4 else fat[:, np.newaxis, :, :]
+        water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
+        volume, water = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(water).type(torch.FloatTensor)
     else:
         volume, label, header = du.load_and_preprocess_eval(file_path,
                                                         orientation=orientation)
@@ -264,6 +284,8 @@ def _segment_vol(file_path, model, orientation, batch_size, cuda_available, devi
         if multi_channel:
             batch_x = torch.cat((volume[i: i + batch_size], fat[i: i + batch_size], water[i: i + batch_size]),
                                          dim=1)
+        elif use_2channel:
+            batch_x = torch.cat((volume[i: i + batch_size], water[i: i + batch_size]), dim=1)
         else:
             batch_x = volume[i: i + batch_size]
 
@@ -480,7 +502,7 @@ def evaluate(coronal_model_path, volumes_txt_file, data_dir, label_dir, label_li
 
 def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_dir, label_dir, device, prediction_path,
                   batch_size,
-                  label_names, label_list, dir_struct, need_unc=False, mc_samples=0, exit_on_error=False, multi_channel=False):
+                  label_names, label_list, dir_struct, need_unc=False, mc_samples=0, exit_on_error=False, multi_channel=False, use_2channel=False):
     log.info("**Starting evaluation**")
 
     if dir_struct == 'KORANAKOUKB':
@@ -499,6 +521,8 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
         with open(volumes_txt_file) as file_handle:
             volumes_to_use = file_handle.read().splitlines()
         if multi_channel:
+            file_paths = du.load_file_paths_3channel(data_dir, label_dir, dir_struct, volumes_txt_file)
+        elif use_2channel:
             file_paths = du.load_file_paths_3channel(data_dir, label_dir, dir_struct, volumes_txt_file)
         else:
             file_paths = du.load_file_paths(data_dir, label_dir, dir_struct, volumes_txt_file)
@@ -564,14 +588,14 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
                 else:
                     volume_prediction_cor, (label, reference_label), _, header = _segment_vol(file_path, model1, "COR", batch_size,
                                                                                cuda_available,
-                                                                               device, multi_channel)
+                                                                               device, multi_channel, use_2channel)
                     print('segment cor')
                     volume_prediction_axi, (label, reference_label), _, header = _segment_vol(file_path, model2, "AXI", batch_size,
                                                                                cuda_available,
-                                                                               device, multi_channel)
+                                                                               device, multi_channel, use_2channel)
                     print('segment axi')
                 print(volume_prediction_cor.shape, volume_prediction_axi.shape, label.shape, reference_label.shape)
-                if not multi_channel:
+                if not multi_channel and not use_2channel:
                     reference_label = label
 
                 volume_prediction_axi = F.softmax(volume_prediction_axi, dim=1)
@@ -646,7 +670,7 @@ def evaluate2view(coronal_model_path, axial_model_path, volumes_txt_file, data_d
 def evaluate3view(coronal_model_path, axial_model_path, sagittal_model_path, volumes_txt_file, data_dir, label_dir,
                   device, prediction_path,
                   batch_size,
-                  label_names, label_list, dir_struct, need_unc=False, mc_samples=0, exit_on_error=False, multi_channel=False):
+                  label_names, label_list, dir_struct, need_unc=False, mc_samples=0, exit_on_error=False, multi_channel=False,use_2channel=False):
     log.info("**Starting evaluation**")
 
     if dir_struct == 'KORANAKOUKB':
@@ -664,7 +688,7 @@ def evaluate3view(coronal_model_path, axial_model_path, sagittal_model_path, vol
         with open(volumes_txt_file) as file_handle:
             volumes_to_use = file_handle.read().splitlines()
 
-        if multi_channel:
+        if multi_channel or use_2channel:
             file_paths = du.load_file_paths_3channel(data_dir, label_dir, dir_struct, volumes_txt_file)
         else:
             file_paths = du.load_file_paths(data_dir, label_dir, dir_struct, volumes_txt_file)
@@ -724,29 +748,30 @@ def evaluate3view(coronal_model_path, axial_model_path, sagittal_model_path, vol
                 if need_unc == "True":
                     volume_prediction_cor, _, mc_pred_list_cor, header = _segment_vol_unc(file_path, model1, "COR",
                                                                                           batch_size, mc_samples,
-                                                                                          cuda_available, device, multi_channel)
+                                                                                          cuda_available, device)
                     volume_prediction_axi, _, mc_pred_list_axi, header = _segment_vol_unc(file_path, model2, "AXI",
                                                                                           batch_size, mc_samples,
-                                                                                          cuda_available, device, multi_channel)
+                                                                                          cuda_available, device)
                     volume_prediction_sag, _, mc_pred_list_sag, header = _segment_vol_unc(file_path, model3, "SAG",
                                                                                           batch_size, mc_samples,
-                                                                                          cuda_available, device, multi_channel)
+                                                                                          cuda_available, device)
                     mc_pred_list = mc_pred_list_cor + mc_pred_list_axi + mc_pred_list_sag
                     iou_dict, cvs_dict = compute_structure_uncertainty(mc_pred_list, label_names,
                                                                        volumes_to_use[vol_idx])
                     cvs_dict_list.append(cvs_dict)
                     iou_dict_list.append(iou_dict)
                 else:
-                    volume_prediction_cor, (label, reference_label), _, header = _segment_vol(file_path, model1, "COR", batch_size, cuda_available, device, multi_channel)
+                    volume_prediction_cor, (label, reference_label), _, header = _segment_vol(file_path, model1, "COR",
+                                                                                              batch_size, cuda_available, device, multi_channel, use_2channel)
                     print('segment cor')
                     # volume_pred, label, volume_prediction, header
                     volume_prediction_axi, (label, reference_label), _, header = _segment_vol(file_path, model2, "AXI", batch_size,
                                                                                cuda_available,
-                                                                               device, multi_channel)
+                                                                               device, multi_channel, use_2channel)
                     print('segment axi')
                     volume_prediction_sag, (label, reference_label), _, header = _segment_vol(file_path, model3, "SAG", batch_size,
                                                                                cuda_available,
-                                                                               device, multi_channel)
+                                                                               device, multi_channel, use_2channel)
                     print('segment sag')
 
                 volume_prediction_axi = F.softmax(volume_prediction_axi, dim=1)

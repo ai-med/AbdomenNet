@@ -83,6 +83,7 @@ def evaluate(eval_params, net_params, data_params, common_params, train_params):
     orientation = eval_params['orientation']
     data_id = eval_params['data_id']
     multi_channel = data_params['use_3channel']
+    use_2channel = data_params['use_2channel']
     logWriter = LogWriter(num_classes, log_dir, exp_name, labels=labels)
 
     avg_dice_score, class_dist = evaluate_dice_score(eval_model_path,
@@ -96,7 +97,8 @@ def evaluate(eval_params, net_params, data_params, common_params, train_params):
                                                         data_id,
                                                         device,
                                                         logWriter,
-                                                        multi_channel=multi_channel)
+                                                        multi_channel=multi_channel,
+                                                        use_2channel=use_2channel)
     logWriter.close()
 
 
@@ -112,7 +114,8 @@ def evaluate_bulk(eval_bulk):
     need_unc = eval_bulk['estimate_uncertainty']
     mc_samples = eval_bulk['mc_samples']
     dir_struct = eval_bulk['directory_struct']
-    multi_channel = False # data_params['use_3channel']
+    multi_channel = data_params['use_3channel']
+    use_2channel = data_params['use_2channel']
 
     if 'exit_on_error' in eval_bulk.keys():
         exit_on_error = eval_bulk['exit_on_error']
@@ -135,7 +138,8 @@ def evaluate_bulk(eval_bulk):
             need_unc,
             mc_samples,
             exit_on_error=exit_on_error,
-            multi_channel=multi_channel
+            multi_channel=multi_channel,
+            use_2channel=use_2channel
         )
     elif eval_bulk['3view_agg'] == 'True':
         coronal_model_path = eval_bulk['coronal_model_path']
@@ -155,7 +159,8 @@ def evaluate_bulk(eval_bulk):
             need_unc,
             mc_samples,
             exit_on_error=exit_on_error,
-            multi_channel=multi_channel
+            multi_channel=multi_channel,
+            use_2channel=use_2channel
         )
     else:
         coronal_model_path = eval_bulk['coronal_model_path']

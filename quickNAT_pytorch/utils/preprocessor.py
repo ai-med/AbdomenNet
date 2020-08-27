@@ -69,6 +69,7 @@ def estimate_weights_mfb(labels):
     class_weights += 2 * edge_weights
     return class_weights, weights
 
+
 def reduce_slices_3channel(data, fat, water, labels, skip_Frame=40):
     """
     This function removes the useless black slices from the start and end. And then selects every even numbered frame.
@@ -85,6 +86,24 @@ def reduce_slices_3channel(data, fat, water, labels, skip_Frame=40):
 
 
     return data_reduced, fat_reduced, water_reduced, labels_reduced
+
+
+def reduce_slices_2channel(data, water, labels, skip_Frame=40):
+    """
+    This function removes the useless black slices from the start and end. And then selects every even numbered frame.
+    """
+    no_slices, H, W = data.shape
+    mask_vector = np.zeros(no_slices, dtype=int)
+    mask_vector[::2], mask_vector[1::2] = 1, 0
+    mask_vector[:skip_Frame], mask_vector[-skip_Frame:-1] = 0, 0
+
+    data_reduced = np.compress(mask_vector, data, axis=0).reshape(-1, H, W)
+    labels_reduced = np.compress(mask_vector, labels, axis=0).reshape(-1, H, W)
+    # fat_reduced = np.compress(mask_vector, fat, axis=0).reshape(-1, H, W)
+    water_reduced = np.compress(mask_vector, water, axis=0).reshape(-1, H, W)
+
+    return data_reduced, water_reduced, labels_reduced
+
 
 def reduce_slices(data, labels, skip_Frame=40):
     """
