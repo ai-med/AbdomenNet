@@ -143,6 +143,9 @@ class LogWriter(object):
         print("Sample Images...", end='', flush=True)
         ncols = 2
         nrows = len(prediction)
+        print("len pred", len(prediction))
+        print('in log image, len prediction ', nrows)
+        print('len gt ', len(ground_truth))
         fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=(10, 20))
 
         for i in range(nrows):

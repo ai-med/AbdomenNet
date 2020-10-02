@@ -1,12 +1,12 @@
 import argparse
 import os
 import torch
-import utils.evaluator as eu
+from utils.evaluator import evaluate, evaluate2view, evaluate_dice_score, compute_vol_bulk, evaluate3view
 from quicknat import QuickNat
 from fastSurferCNN import FastSurferCNN
 from settings import Settings
 from solver import Solver
-from utils.data_utils import get_imdb_dataset
+from utils.data_utils import get_imdb_dataset, get_imdb_dataset_3channel, get_imdb_dataset_2channel
 from utils.log_utils import LogWriter
 import logging
 import shutil
@@ -16,7 +16,12 @@ torch.set_default_tensor_type('torch.FloatTensor')
 
 def load_data(data_params):
     print("Loading dataset")
-    train_data, test_data = get_imdb_dataset(data_params)
+    if data_params['use_3channel'] == True:
+        train_data, test_data = get_imdb_dataset_3channel(data_params)
+    elif data_params['use_2channel'] == True:
+        train_data, test_data = get_imdb_dataset_2channel(data_params)
+    else:
+        train_data, test_data = get_imdb_dataset(data_params)
     print("Train size: %i" % len(train_data))
     print("Test size: %i" % len(test_data))
     return train_data, test_data
@@ -77,10 +82,11 @@ def evaluate(eval_params, net_params, data_params, common_params, train_params):
     prediction_path = os.path.join(exp_dir, exp_name, save_predictions_dir)
     orientation = eval_params['orientation']
     data_id = eval_params['data_id']
-
+    multi_channel = data_params['use_3channel']
+    use_2channel = data_params['use_2channel']
     logWriter = LogWriter(num_classes, log_dir, exp_name, labels=labels)
 
-    avg_dice_score, class_dist = eu.evaluate_dice_score(eval_model_path,
+    avg_dice_score, class_dist = evaluate_dice_score(eval_model_path,
                                                         num_classes,
                                                         data_dir,
                                                         label_dir,
@@ -90,7 +96,9 @@ def evaluate(eval_params, net_params, data_params, common_params, train_params):
                                                         prediction_path,
                                                         data_id,
                                                         device,
-                                                        logWriter)
+                                                        logWriter,
+                                                        multi_channel=multi_channel,
+                                                        use_2channel=use_2channel)
     logWriter.close()
 
 
@@ -106,6 +114,9 @@ def evaluate_bulk(eval_bulk):
     need_unc = eval_bulk['estimate_uncertainty']
     mc_samples = eval_bulk['mc_samples']
     dir_struct = eval_bulk['directory_struct']
+    multi_channel = data_params['use_3channel']
+    use_2channel = data_params['use_2channel']
+
     if 'exit_on_error' in eval_bulk.keys():
         exit_on_error = eval_bulk['exit_on_error']
     else:
@@ -114,41 +125,68 @@ def evaluate_bulk(eval_bulk):
     if eval_bulk['view_agg'] == 'True':
         coronal_model_path = eval_bulk['coronal_model_path']
         axial_model_path = eval_bulk['axial_model_path']
-        eu.evaluate2view(
-                        coronal_model_path,
-                         axial_model_path,
-                         volumes_txt_file,
-                         data_dir, label_dir, device,
-                         prediction_path,
-                         batch_size,
-                         label_names,
-                         label_list,
-                         dir_struct,
-                         need_unc,
-                         mc_samples,
-                         exit_on_error=exit_on_error)
+        evaluate2view(
+            coronal_model_path,
+            axial_model_path,
+            volumes_txt_file,
+            data_dir, label_dir, device,
+            prediction_path,
+            batch_size,
+            label_names,
+            label_list,
+            dir_struct,
+            need_unc,
+            mc_samples,
+            exit_on_error=exit_on_error,
+            multi_channel=multi_channel,
+            use_2channel=use_2channel
+        )
+    elif eval_bulk['3view_agg'] == 'True':
+        coronal_model_path = eval_bulk['coronal_model_path']
+        axial_model_path = eval_bulk['axial_model_path']
+        sagittal_model_path = eval_bulk['sagittal_model_path']
+        evaluate3view(
+            coronal_model_path,
+            axial_model_path,
+            sagittal_model_path,
+            volumes_txt_file,
+            data_dir, label_dir, device,
+            prediction_path,
+            batch_size,
+            label_names,
+            label_list,
+            dir_struct,
+            need_unc,
+            mc_samples,
+            exit_on_error=exit_on_error,
+            multi_channel=multi_channel,
+            use_2channel=use_2channel
+        )
     else:
         coronal_model_path = eval_bulk['coronal_model_path']
-        eu.evaluate(coronal_model_path,
-                    volumes_txt_file,
-                    data_dir,
-                    label_dir, label_list,
-                    device,
-                    prediction_path,
-                    batch_size,
-                    "COR",
-                    label_names,
-                    dir_struct,
-                    need_unc,
-                    mc_samples,
-                    exit_on_error=exit_on_error)
+        evaluate(
+            coronal_model_path,
+            volumes_txt_file,
+            data_dir,
+            label_dir, label_list,
+            device,
+            prediction_path,
+            batch_size,
+            "COR",
+            label_names,
+            dir_struct,
+            need_unc,
+            mc_samples,
+            exit_on_error=exit_on_error,
+            multi_channel=multi_channel
+        )
 
 def compute_vol(eval_bulk):
     prediction_path = eval_bulk['save_predictions_dir']
     label_names = ['liver', 'spleen', 'kidney_r', 'kidney_l', 'adrenal_r', 'adrenal_l', 'pancreas', 'gallbladder']
     volumes_txt_file = eval_bulk['volumes_txt_file']
 
-    eu.compute_vol_bulk(prediction_path, "Linear", label_names, volumes_txt_file)
+    compute_vol_bulk(prediction_path, "Linear", label_names, volumes_txt_file)
 
 
 
@@ -171,7 +209,7 @@ if __name__ == '__main__':
     parser.add_argument('--setting_path', '-sp', required=False, help='optional path to settings_eval_nako.ini')
     args = parser.parse_args()
 
-    settings = Settings('settings_merged.ini')
+    settings = Settings('settings_kora.ini')
     common_params, data_params, net_params, train_params, eval_params = settings['COMMON'], settings['DATA'], \
                                                                         settings[
                                                                             'NETWORK'], settings['TRAINING'], \
@@ -185,7 +223,7 @@ if __name__ == '__main__':
         if args.setting_path is not None:
             settings_eval = Settings(args.setting_path)
         else:
-            settings_eval = Settings('settings_eval_merged.ini')
+            settings_eval = Settings('settings_kora.ini')
         evaluate_bulk(settings_eval['EVAL_BULK'])
     elif args.mode == 'clear':
         shutil.rmtree(os.path.join(common_params['exp_dir'], train_params['exp_name']))

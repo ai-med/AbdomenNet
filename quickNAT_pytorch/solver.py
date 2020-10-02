@@ -104,12 +104,14 @@ class Solver(object):
                     X = sample_batched[0].type(torch.FloatTensor)
                     y = sample_batched[1].type(torch.LongTensor)
                     w = sample_batched[2].type(torch.FloatTensor)
-
+                    wd = sample_batched[3].type(torch.FloatTensor)
+                    #print('dice weights ', wd.shape)
                     if model.is_cuda:
-                        X, y, w = X.cuda(self.device, non_blocking=True), y.cuda(self.device,
+                        X, y, w, wd = X.cuda(self.device, non_blocking=True), y.cuda(self.device,
                                                                                  non_blocking=True), w.cuda(self.device,
+                                                                                                           non_blocking=True), wd.cuda(self.device,
                                                                                                            non_blocking=True)
-
+                    #print('input shape ', X.shape)
                     output = model(X)
                     #print(X.shape)
                     #print(y.shape)
@@ -119,7 +121,14 @@ class Solver(object):
                         #print(y.shape)
                         #print(output.shape)
                         pass
-                    loss = self.loss_func(output, y, w)
+                    #print('output shape ', output.shape)
+                    #print('target shape ', y.shape)
+                    #print('weights shape ', w.shape)
+                    #print('min target ', torch.min(y))
+                    #print('max target ', torch.max(y))
+                    #print('min output ', torch.min(output))
+                    #print('max output ', torch.max(output))
+                    loss = self.loss_func(output, y, w, wd)
                     if phase == 'train':
                         optim.zero_grad()
                         loss.backward()
@@ -147,8 +156,9 @@ class Solver(object):
                     out_arr, y_arr = torch.cat(out_list), torch.cat(y_list)
                     self.logWriter.loss_per_epoch(loss_arr, phase, epoch)
                     index = np.random.choice(len(dataloaders[phase].dataset.X), 3, replace=False)
-                    self.logWriter.image_per_epoch(model.predict(dataloaders[phase].dataset.X[index], self.device),
-                                                   dataloaders[phase].dataset.y[index], phase, epoch)
+                    print("index")
+                    #self.logWriter.image_per_epoch(model.predict(dataloaders[phase].dataset.X[index], self.device),
+                    #                               dataloaders[phase].dataset.y[index], phase, epoch)
                     self.logWriter.cm_per_epoch(phase, out_arr, y_arr, epoch)
                     ds_mean = self.logWriter.dice_score_per_epoch(phase, out_arr, y_arr, epoch)
                     if phase == 'val':
