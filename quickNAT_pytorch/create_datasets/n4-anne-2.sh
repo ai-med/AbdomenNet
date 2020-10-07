@@ -1,15 +1,13 @@
 export LD_LIBRARY_PATH="/home/abhijit/nas_drive/Software/ANTS/install/lib"
 ANTSPATH=/home/abhijit/nas_drive/Software/ANTS/install/bin
 
-INPUT_DIR="/home/abhijit/Jyotirmay/abdominal_segmentation/quickNAT_pytorch/create_datasets/temp/NAKO/processed/vol"
-# for 1st run: *iso_in*rescaled*.nii.gz
-# for 2nd run: *iso_in_corrected_comb_sigm_rescaled*
+INPUT_DIR="/home/abhijit/Jyotirmay/abdominal_segmentation/quickNAT_pytorch/create_datasets/temp/KORA/n4_corrected/vol"
 
 for file in "${INPUT_DIR}"/*;
 do
 echo "$file"
 
- for image in "${file}"/*IN_ras_stitched*;
+ for image in "${file}"/*IN_ras_stitched_n4_scaled.nii.gz;
  do
  echo "$image"
 
@@ -20,7 +18,7 @@ echo "$file"
  --input-image "${image}" \
  --output ["${NAME}"_corrected.nii.gz , "${NAME}"_bias_field.nii.gz] \
  --shrink-factor 3 \
- --convergence [200x200x200x200, 0.0001] \
+ --convergence [500x500x500x500, 0.0001] \
  --verbose
  done
 done
