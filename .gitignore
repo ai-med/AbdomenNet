@@ -135,4 +135,6 @@ dmypy.json
 # Ide files
 .idea
 .idea/**
+.idea/vcs.xml
+.idea/*
 
