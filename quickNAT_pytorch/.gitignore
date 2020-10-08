@@ -17,3 +17,7 @@ other_packages/
 *.DS_Store
 documentation/
 .vscode/
+create_datasets/datasets/**
+create_datasets/temp/**
+create_datasets/temp
+create_datasets/datasets
