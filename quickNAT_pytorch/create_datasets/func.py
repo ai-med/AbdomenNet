@@ -727,9 +727,6 @@ def normalise_data(volume):
     volume = (volume - np.min(volume)) / (np.max(volume) - np.min(volume))
     return volume
 
-
-
-
 def post_interpolate(volume, labelmap=None, target_shape=[256,256,128]):
     volume = do_cropping(volume, target_shape)
     if labelmap is not None:
@@ -766,7 +763,6 @@ def drop_overlapped_pixels(labelmap, availed_manual_segs_id_list, no_of_class):
         print(f'Overlapped Idxs Found, removing it for idx {idxs}')
         labelmap[labelmap == idxs] = 0
     return labelmap
-
 
 def nrrd_reader(file_path):
     print("Reading NRRD Files.....")
