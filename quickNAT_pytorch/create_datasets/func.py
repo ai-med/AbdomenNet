@@ -34,9 +34,11 @@ DEFAULT_LINSPACE = 30
 
 FILE_TO_LABEL_MAP =  {'BACKGROUND': ['background'],'LIVER': ['liver'], 'SPLEEN': ['spleen', 'spl'],'KIDNEY(RIGHT)':['kidney_r', 'kidney (right)'],
                       'KIDNEY(LEFT)':['kidney_l', 'kidney (left)'], 'ADRENALGLAND':['adrenal', 'adremal'], 'PANCREAS': ['pancreas'],
-                      'GALLBLADDER': ['gallbladder', 'Gallblader'], 'SUBCUTANEOUS':['subcutaneous', 'subcutan'], 'THYROIDGLAND':['thyroid']}
+                      'GALLBLADDER': ['gallbladder', 'Gallblader']}
 
+# 'SUBCUTANEOUS':['subcutaneous', 'subcutan'], 'THYROIDGLAND':['thyroid']
 
+# 'SUBCUTANEOUS', 'THYROIDGLAND'
 dataset='KORA'
 volume_txt_file = 'datasets/kora/volumes_kurz.txt'
 data_dir = "/home/abhijit/nas_drive/Data_WholeBody/KORA/KORA_all/KORA_Nifti"
@@ -570,16 +572,25 @@ def makeit_3d(img):
     img_3d = nb.Nifti1Image(data_3d, img.affine, img.header)
     return img_3d
 
+def labels_integerify(img):
+    data = img.get_fdata()
+    data = np.abs(np.round(data))
+    return nb.Nifti1Image(data, img.affine, img.header)
+
 def label_parts(label_parts):
     stitched_label = None
     reference_labelmap = None
+    mode = 'constant'
     for labelmap_img, lidx, lname in label_parts:
-        print(lidx, lname, labelmap_img.shape)
+        print('lp:bfr:', lidx, lname, labelmap_img.shape, np.unique(labelmap_img.get_fdata()))
+#         labelmap_img = makeit_3d(labelmap_img)
         if reference_labelmap is None:
             reference_labelmap = labelmap_img
         else:
-            labelmap_img = resample_from_to(labelmap_img, [reference_labelmap.shape, reference_labelmap.affine])
-
+            labelmap_img = resample_from_to(labelmap_img, [reference_labelmap.shape, reference_labelmap.affine], order=3, mode=mode, cval=0)
+            labelmap_img = labels_integerify(labelmap_img)
+        print(np.unique(labelmap_img.get_fdata()))
+        
         labelmap = labelmap_img.get_fdata()
         labelmap = np.multiply(lidx, labelmap)
         if stitched_label is None:
@@ -593,56 +604,6 @@ def label_parts(label_parts):
     stitched_labeled_img = nb.Nifti1Image(labelmap, reference_labelmap.affine, reference_labelmap.header)
     
     return stitched_labeled_img
-
-def vol_label_fix(vol, label):
-    vol_vol = np.product(vol.shape)
-    label_vol = np.product(label.shape)
-    
-    label_affine = label.affine
-    vol_affine = vol.affine
-    if(vol_vol>label_vol):
-        final_label = np.zeros(vol.shape)
-        target_affine = vol_affine
-        target_header = vol.header
-        target_dim_v = vol.shape
-        
-#         labelmap2vol = npl.inv(target_affine).dot(label_affine)
-#         start_inv = np.floor(apply_affine(labelmap2vol, [0,0,0])).astype(np.int32)
-#         sx, sy,sz = start_inv
-#         end_inv = apply_affine(labelmap2vol, target_dim_v).astype(np.int32)
-#         final_label = np.zeros(end_inv)
-#         ex, ey, ez = end_inv
-#         print("seg start inv v: ",start_inv , "segm end inv v:",end_inv)
-        sx,sy,sz,ex,ey,ez = np.abs(get_points(label, vol))
-        print(sx,sy,sz,ex,ey,ez)
-        final_label[0:ex+sx, 0:ey+sy, sz:ez] = label.get_fdata()
-        final_label = np.flip(final_label, axis=0)
-        final_label = np.flip(final_label, axis=1)
-        final_label_img = nb.Nifti1Image(final_label, target_affine, target_header)
-        volume, label = vol, final_label_img
-    else:
-        final_label = np.zeros(label.shape)
-        target_affine = label_affine
-        target_header = label.header
-        target_dim_v = label.shape
-        
-#         labelmap2vol = npl.inv(target_affine).dot(vol_affine)
-#         start_inv = np.floor(apply_affine(labelmap2vol, [0,0,0])).astype(np.int32)
-#         sx, sy,sz = start_inv
-#         end_inv = apply_affine(labelmap2vol, target_dim_v).astype(np.int32)
-#         final_label = np.zeros(end_inv)
-#         ex, ey, ez = end_inv
-#         print("seg start inv v: ",start_inv , "segm end inv v:",end_inv)
-        sx,sy,sz,ex,ey,ez = np.abs(get_points(vol, label))
-        print(sx,sy,sz,ex,ey,ez)
-        final_label = np.flip(final_label, axis=0)
-        final_label = np.flip(final_label, axis=1)
-        final_label[0:ex+sx, 0:ey+sy, sz:ez] = vol.get_fdata()
-        
-        final_label_img = nb.Nifti1Image(final_label, target_affine, target_header)
-        volume, label = final_label_img, label
-    
-    return volume, label
 
 def read_ras(file_path, file_type=None, is_label=False):
     _, _, img = file_reader(file_path, file_type)
@@ -668,7 +629,8 @@ def fetch_class_labels_from_filemap(labelmap_path, file_labels=FILE_TO_LABEL_MAP
     else:
         ifExceptedFilePresent = np.any([other.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for other in other_file])
         if not ifExceptedFilePresent:
-            raise Exception(f'No Matched Label Found for {labelmap_path}!')
+#             raise Exception(f'No Matched Label Found for {labelmap_path}!')
+            print(f"Other labelmap values Found for {labelmap_path}")
         else:
             print(f"Other File Found for {labelmap_path}")
     return label_idx, label
@@ -792,7 +754,7 @@ def file_reader(file_path, file_type=None):
         t_mat = from_matvec(affine, origins)
         img = nb.Nifti1Image(data, t_mat) if img is None else img
         header_mat = t_mat
-    elif file_type == '.nii.gz' or file_type == 'nii':
+    elif file_type == 'gz' or file_type == 'nii':
         data, header, img = nibabel_reader(file_path)
         header_mat = header
     else:
