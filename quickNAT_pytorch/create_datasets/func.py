@@ -39,17 +39,17 @@ FILE_TO_LABEL_MAP =  {'BACKGROUND': ['background'],'LIVER': ['liver'], 'SPLEEN':
 # 'SUBCUTANEOUS':['subcutaneous', 'subcutan'], 'THYROIDGLAND':['thyroid']
 
 # 'SUBCUTANEOUS', 'THYROIDGLAND'
-dataset='KORA'
-volume_txt_file = 'datasets/kora/volumes_kurz.txt'
-data_dir = "/home/abhijit/nas_drive/Data_WholeBody/KORA/KORA_all/KORA_Nifti"
-label_dir = 'datasets/lablmaps/KORA'
+dataset='NAKO'
+volume_txt_file = 'datasets/nako/volumes.txt'
+data_dir = "/home/abhijit/nas_drive/Data_WholeBody/NAKO/NAKO_200/MRI"
+label_dir = 'datasets/lablmaps/NAKO'
 
-n4_corrected_data_dir = "temp/KORA/n4_corrected"
-stictched_data_dir = "temp/KORA/stitched"
-stitched_n4_corrected_data_dir = "temp/KORA/stitched_n4_corrected"
+n4_corrected_data_dir = "temp/NAKO/n4_corrected"
+stictched_data_dir = "temp/NAKO/stitched"
+stitched_n4_corrected_data_dir = "temp/NAKO/stitched_n4_corrected"
 
-processed_path = 'temp/KORA/'
-processed_dir = 'temp/KORA/processed'
+processed_path = 'temp/NAKO/'
+processed_dir = 'temp/NAKO/processed'
 
 one_time_n4_optimization = True
 
@@ -581,27 +581,33 @@ def label_parts(label_parts):
     stitched_label = None
     reference_labelmap = None
     mode = 'constant'
+    label_shape = np.max([img.shape for img, _, _ in label_parts], axis=0)
+    print('final_label_stitching shape:',label_shape)
+    stitched_label = np.zeros(label_shape)
     for labelmap_img, lidx, lname in label_parts:
         print('lp:bfr:', lidx, lname, labelmap_img.shape, np.unique(labelmap_img.get_fdata()))
 #         labelmap_img = makeit_3d(labelmap_img)
-        if reference_labelmap is None:
-            reference_labelmap = labelmap_img
-        else:
-            labelmap_img = resample_from_to(labelmap_img, [reference_labelmap.shape, reference_labelmap.affine], order=3, mode=mode, cval=0)
-            labelmap_img = labels_integerify(labelmap_img)
-        print(np.unique(labelmap_img.get_fdata()))
+#         if reference_labelmap is None:
+#             reference_labelmap = labelmap_img
+#         else:
+#             labelmap_img = resample_from_to(labelmap_img, [reference_labelmap.shape, reference_labelmap.affine], order=3, mode=mode, cval=0)
+#             labelmap_img = labels_integerify(labelmap_img)
+#         print(np.unique(labelmap_img.get_fdata()))
         
         labelmap = labelmap_img.get_fdata()
         labelmap = np.multiply(lidx, labelmap)
-        if stitched_label is None:
-            stitched_label = labelmap
-        else:
-            print(stitched_label.shape)
-            stitched_label = np.add(stitched_label, labelmap)
+        x, y, z = labelmap.shape
+        stitched_label[:x, :y, :z] += labelmap
+#         if stitched_label is None:
+#             stitched_label = labelmap
+#         else:
+#             print(stitched_label.shape)
+#             stitched_label = np.add(stitched_label, labelmap)
         print("###############################################################################################") 
         
     labelmap = np.round(stitched_label)
-    stitched_labeled_img = nb.Nifti1Image(labelmap, reference_labelmap.affine, reference_labelmap.header)
+    empty_header = nb.Nifti1Header()
+    stitched_labeled_img = nb.Nifti1Image(labelmap, np.diag(TARGET_RESOLUTION+[1]))
     
     return stitched_labeled_img
 
@@ -810,7 +816,8 @@ def multi_vol_stitching(images, is_label=False):
         #         print(img_1.affine)
         img_0 = vol_stitching(img_0, img_1)
     #         print(img_0.affine, 'FINISHHHHHHHHH')
-
+#     reference_labelmap = nb.load(f'temp/ref_img.nii.gz')
+#     img_0 = resample_from_to(img_0, [reference_labelmap.shape, reference_labelmap.affine])
     return img_0
 
 
