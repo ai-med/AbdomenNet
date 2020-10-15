@@ -11,6 +11,7 @@ import pickle as p
 import json
 import subprocess
 import getpass
+import matplotlib.pyplot as plt
 
 from nibabel.orientations import axcodes2ornt, ornt_transform, inv_ornt_aff, flip_axis
 from nibabel.affines import from_matvec, to_matvec, apply_affine
@@ -18,41 +19,7 @@ from nibabel.processing import resample_to_output, resample_from_to
 import numpy.linalg as npl
 
 # from nilearn.image import resample_img
-
-DATASET = 'KORA' # 'NAKO', 'UKB', 'KORANAKOUKB'
-DEFAULT_FILE_TYPE = 'nifti'  # 'nerd'
-TARGET_FILE_TYPE = 'nifti'
-DEFAULT_ORIENTATION = 'RAS'
-TARGET_RESOLUTION = [2,2,3]
-DEFAULT_VIEW = ['Saggital', 'Coronal', 'Axial']
-DEFAULT_REFERENCE_VIEW = 'Sagittal'
-OPTIMIZATION = 'N4'  # Intensity, Min-Max, Fat-Water-Swap
-IS_CROPPING = True
-DEFAULT_WORLD_COORDS = [500, 500, 1000]
-DEFAULT_OUTPUT_PATH = './temp'
-DEFAULT_LINSPACE = 30
-
-FILE_TO_LABEL_MAP =  {'BACKGROUND': ['background'],'LIVER': ['liver'], 'SPLEEN': ['spleen', 'spl'],'KIDNEY(RIGHT)':['kidney_r', 'kidney (right)'],
-                      'KIDNEY(LEFT)':['kidney_l', 'kidney (left)'], 'ADRENALGLAND':['adrenal', 'adremal'], 'PANCREAS': ['pancreas'],
-                      'GALLBLADDER': ['gallbladder', 'Gallblader']}
-
-# 'SUBCUTANEOUS':['subcutaneous', 'subcutan'], 'THYROIDGLAND':['thyroid']
-
-# 'SUBCUTANEOUS', 'THYROIDGLAND'
-dataset='NAKO'
-volume_txt_file = 'datasets/nako/volumes.txt'
-data_dir = "/home/abhijit/nas_drive/Data_WholeBody/NAKO/NAKO_200/MRI"
-label_dir = 'datasets/lablmaps/NAKO'
-
-n4_corrected_data_dir = "temp/NAKO/n4_corrected"
-stictched_data_dir = "temp/NAKO/stitched"
-stitched_n4_corrected_data_dir = "temp/NAKO/stitched_n4_corrected"
-
-processed_path = 'temp/NAKO/'
-processed_dir = 'temp/NAKO/processed'
-
-one_time_n4_optimization = True
-
+from global_vars import *
 
 def rescale(in_image, vol_id, original_filename):
     new_filename = original_filename.split('/')[-1].split('.')[0]
@@ -818,8 +785,28 @@ def multi_vol_stitching(images, is_label=False):
     #         print(img_0.affine, 'FINISHHHHHHHHH')
 #     reference_labelmap = nb.load(f'temp/ref_img.nii.gz')
 #     img_0 = resample_from_to(img_0, [reference_labelmap.shape, reference_labelmap.affine])
+#     img_resampled = resample_to_output(img_0, TARGET_RESOLUTION, order=3, mode='nearest', cval=0.0)
     return img_0
 
+def visualize_overlay(file_paths):
+    for vol_id in file_paths.keys():
+        print(vol_id)
+        try:
+            vol = nb.load(f'{processed_dir}/volume/{vol_id}.nii.gz')
+            label = nb.load(f'{processed_dir}/label/{vol_id}.nii.gz')
+        except Exception as e:
+            print(e)
+            continue
+        im = vol.get_fdata()
+        x = im.shape[0]//2
+        masked = label.get_fdata()
+        plt.figure()
+        plt.subplot(1,2,1)
+        plt.imshow(im[x], 'gray', interpolation='none')
+        plt.subplot(1,2,2)
+        plt.imshow(im[x], 'gray', interpolation='none')
+        plt.imshow(masked[x], 'jet', interpolation='none', alpha=0.5)
+        plt.show()
 
 def vol_stitching(im_0, im_1):
     im_0_z = im_0.shape[2]
