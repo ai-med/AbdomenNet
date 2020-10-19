@@ -35,13 +35,13 @@ else:
 
 label_dir = f'datasets/lablmaps/{DATASET}'
 
-n4_corrected_data_dir = f"temp/{DATASET}/n4_corrected"
+n4_corrected_data_dir = f"temp/{DATASET}/n4_corrected_2"
 stictched_data_dir = f"temp/{DATASET}/stitched"
-stitched_n4_corrected_data_dir = f"temp/{DATASET}/stitched_n4_corrected"
+stitched_n4_corrected_data_dir = f"temp/{DATASET}/stitched_n4_corrected_2"
 
 processed_path = f'temp/{DATASET}/'
 processed_dir = f'temp/{DATASET}/processed'
 
 one_time_n4_optimization = True
 
-vol_to_check_list = ['KORA2453666']
+vol_to_check_list = None

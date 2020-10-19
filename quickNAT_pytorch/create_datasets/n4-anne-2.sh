@@ -1,7 +1,7 @@
 export LD_LIBRARY_PATH="/home/abhijit/nas_drive/Software/ANTS/install/lib"
 ANTSPATH=/home/abhijit/nas_drive/Software/ANTS/install/bin
 
-INPUT_DIR="/home/abhijit/Jyotirmay/abdominal_segmentation/quickNAT_pytorch/create_datasets/temp/KORA/n4_corrected/vol"
+INPUT_DIR="/home/abhijit/Jyotirmay/abdominal_segmentation/quickNAT_pytorch/create_datasets/temp/UKB/n4_corrected_2/vol"
 
 for file in "${INPUT_DIR}"/*;
 do
