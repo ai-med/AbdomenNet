@@ -2,7 +2,7 @@
 def get_globals(dset):
     pass
 
-dset = 'UKB'
+dset = 'NAKO'
 DATASET = dset.upper() # 'NAKO', 'UKB', 'KORANAKOUKB'
 dataset = dset.lower()
 DEFAULT_FILE_TYPE = 'nifti'  # 'nerd'
@@ -23,7 +23,7 @@ FILE_TO_LABEL_MAP =  {'BACKGROUND': ['background'],'LIVER': ['liver'], 'SPLEEN':
 
 # 'SUBCUTANEOUS':['subcutaneous', 'subcutan'], 'THYROIDGLAND':['thyroid']
 
-volume_txt_file = f'datasets/{dataset}/volumes.txt'
+volume_txt_file = f'datasets/{dataset}/test.txt'
 if DATASET == 'KORA':
     data_dir = "/home/abhijit/nas_drive/Data_WholeBody/KORA/KORA_all/KORA_Nifti"
 elif DATASET == 'NAKO':
