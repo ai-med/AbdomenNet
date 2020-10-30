@@ -88,51 +88,51 @@ def nrrd_to_nifti(file_path):
 
     return img
 
-def reorient_image(image, axes='RAS', translation_params=(0, 0, 0), is_label=False):
-    # Global parameters
-    POSSIBLE_AXES_ORIENTATIONS = [
-        "LAI", "LIA", "ALI", "AIL", "ILA", "IAL",
-        "LAS", "LSA", "ALS", "ASL", "SLA", "SAL",
-        "LPI", "LIP", "PLI", "PIL", "ILP", "IPL",
-        "LPS", "LSP", "PLS", "PSL", "SLP", "SPL",
-        "RAI", "RIA", "ARI", "AIR", "IRA", "IAR",
-        "RAS", "RSA", "ARS", "ASR", "SRA", "SAR",
-        "RPI", "RIP", "PRI", "PIR", "IRP", "IPR",
-        "RPS", "RSP", "PRS", "PSR", "SRP", "SPR"
-    ]
+# def reorient_image(image, axes='RAS', translation_params=(0, 0, 0), is_label=False):
+#     # Global parameters
+#     POSSIBLE_AXES_ORIENTATIONS = [
+#         "LAI", "LIA", "ALI", "AIL", "ILA", "IAL",
+#         "LAS", "LSA", "ALS", "ASL", "SLA", "SAL",
+#         "LPI", "LIP", "PLI", "PIL", "ILP", "IPL",
+#         "LPS", "LSP", "PLS", "PSL", "SLP", "SPL",
+#         "RAI", "RIA", "ARI", "AIR", "IRA", "IAR",
+#         "RAS", "RSA", "ARS", "ASR", "SRA", "SAR",
+#         "RPI", "RIP", "PRI", "PIR", "IRP", "IPR",
+#         "RPS", "RSP", "PRS", "PSR", "SRP", "SPR"
+#     ]
 
-    #Load the image to rectify
-#     if in_file.split('.')[-1] == 'nrrd':
-#         print('NRRD file received, converting to nifti!!!')
-#         image = nrrd_to_nifti(in_file)
-#     else:
-#         image = nibabel.load(in_file)
+#     #Load the image to rectify
+# #     if in_file.split('.')[-1] == 'nrrd':
+# #         print('NRRD file received, converting to nifti!!!')
+# #         image = nrrd_to_nifti(in_file)
+# #     else:
+# #         image = nibabel.load(in_file)
 
-    header = image.header   
-    axes = nibabel.orientations.aff2axcodes(header.get_best_affine())
-    axes = "".join(list(axes))
+#     header = image.header   
+#     axes = nibabel.orientations.aff2axcodes(header.get_best_affine())
+#     axes = "".join(list(axes))
 
-    # Check that a valid input axes is specified
-    if axes not in POSSIBLE_AXES_ORIENTATIONS:
-        raise ValueError("Wrong coordinate system: {0}.".format(axes))
+#     # Check that a valid input axes is specified
+#     if axes not in POSSIBLE_AXES_ORIENTATIONS:
+#         raise ValueError("Wrong coordinate system: {0}.".format(axes))
 
-    rotation = swap_affine(axes)
-    det = np.linalg.det(rotation)
-    if det != 1:
-        raise Exception("Rotation matrix determinant must be one "
-                        "not '{0}'.".format(det))
+#     rotation = swap_affine(axes)
+#     det = np.linalg.det(rotation)
+#     if det != 1:
+#         raise Exception("Rotation matrix determinant must be one "
+#                         "not '{0}'.".format(det))
 
-    affine = image.get_affine()
-    # Get the trnaslation to apply
-    translation = np.eye(4)
-    translation[:3, 3] = translation_params  # tuple(t) #if not is_label else translation_params[:3, 3]
-    transformation = np.dot(np.dot(rotation, affine), translation)
-    image.set_sform(transformation)
-    data = image.get_data()
-    header = image.header
-    new_axes = nibabel.orientations.aff2axcodes(header.get_best_affine())
-    new_axes = "".join(list(new_axes))
-    return image, data, header
+#     affine = image.get_affine()
+#     # Get the trnaslation to apply
+#     translation = np.eye(4)
+#     translation[:3, 3] = translation_params  # tuple(t) #if not is_label else translation_params[:3, 3]
+#     transformation = np.dot(np.dot(rotation, affine), translation)
+#     image.set_sform(transformation)
+#     data = image.get_data()
+#     header = image.header
+#     new_axes = nibabel.orientations.aff2axcodes(header.get_best_affine())
+#     new_axes = "".join(list(new_axes))
+#     return image, data, header
 
 def change_label(seg, f):
     print(f)
@@ -324,39 +324,40 @@ def combine_nako_seg(seg_files, data_dir, vol_path):
     
     return img, new_img_nii
 
-def swap_affine(axes):
-    CORRECTION_MATRIX_COLUMNS = {
-        "R": (1, 0, 0),
-        "L": (-1, 0, 0),
-        "A": (0, 1, 0),
-        "P": (0, -1, 0),
-        "S": (0, 0, 1),
-        "I": (0, 0, -1)
-    }
+# def swap_affine(axes):
+#     CORRECTION_MATRIX_COLUMNS = {
+#         "R": (1, 0, 0),
+#         "L": (-1, 0, 0),
+#         "A": (0, 1, 0),
+#         "P": (0, -1, 0),
+#         "S": (0, 0, 1),
+#         "I": (0, 0, -1)
+#     }
 
-    if axes not in ['RSP', 'LIP', 'RAS', 'LPS']:
-        raise Exception(
-            f'Unknown axes passed for affine transformation! Please add transformation for {axes} manually.')
-    rotation = np.eye(4)
-    rotation[:3, 0] = CORRECTION_MATRIX_COLUMNS[axes[0]]
-    rotation[:3, 1] = CORRECTION_MATRIX_COLUMNS[axes[1]]
-    rotation[:3, 2] = CORRECTION_MATRIX_COLUMNS[axes[2]]
-    # print(rotation)
-    if axes == "RSP":
-        rotation = np.array([[1., 0., 0., 0.],
-                             [0., 0., 1., 0.],
-                             [0., -1., 0., 0.],
-                             [0., 0., 0., 1.]])
-        # print(rotation)
-    elif axes == "LPS":
-        rotation = np.array([
-            [-1., 0., 0., 0.],
-            [0., -1., 0., 0.],
-            [0., 0., 1., 0.],
-            [0., 0., 0., 1.]
-        ])
-        # print(rotation)
-    return rotation
+#     if axes not in ['RSP', 'LIP', 'RAS', 'LPS']:
+#         raise Exception(
+#             f'Unknown axes passed for affine transformation! Please add transformation for {axes} manually.')
+#     rotation = np.eye(4)
+#     rotation[:3, 0] = CORRECTION_MATRIX_COLUMNS[axes[0]]
+#     rotation[:3, 1] = CORRECTION_MATRIX_COLUMNS[axes[1]]
+#     rotation[:3, 2] = CORRECTION_MATRIX_COLUMNS[axes[2]]
+#     # print(rotation)
+#     if axes == "RSP":
+#         rotation = np.array([[1., 0., 0., 0.],
+#                              [0., 0., 1., 0.],
+#                              [0., -1., 0., 0.],
+#                              [0., 0., 0., 1.]])
+#         # print(rotation)
+#     elif axes == "LPS":
+#         rotation = np.array([
+#             [-1., 0., 0., 0.],
+#             [0., -1., 0., 0.],
+#             [0., 0., 1., 0.],
+#             [0., 0., 0., 1.]
+#         ])
+#         # print(rotation)
+#     return rotation
+
 def get_points(segm, img):
     if segm.shape == img.shape:
         return 0,0,0,segm.shape[0], segm.shape[1],segm.shape[2]
@@ -539,10 +540,10 @@ def makeit_3d(img):
     img_3d = nb.Nifti1Image(data_3d, img.affine, img.header)
     return img_3d
 
-def labels_integerify(img):
-    data = img.get_fdata()
-    data = np.abs(np.round(data))
-    return nb.Nifti1Image(data, img.affine, img.header)
+# def labels_integerify(img):
+#     data = img.get_fdata()
+#     data = np.abs(np.round(data))
+#     return nb.Nifti1Image(data, img.affine, img.header)
 
 def label_parts(label_parts):
     stitched_label = None
@@ -582,7 +583,6 @@ def read_ras(file_path, file_type=None, is_label=False):
     _, _, img = file_reader(file_path, file_type)
     if img is None:
         return None if is_label is False else None, None, None
-#     print("header", img.header)
     img_ras = do_nibabel_transform_to_ras(img)
     if is_label:
         file_labels = list(FILE_TO_LABEL_MAP.keys())
@@ -662,33 +662,33 @@ def normalise_data(volume):
     volume = (volume - np.min(volume)) / (np.max(volume) - np.min(volume))
     return volume
 
-def post_interpolate(volume, labelmap=None, target_shape=[256,256,128]):
-    volume = do_cropping(volume, target_shape)
-    if labelmap is not None:
-        labelmap = do_cropping(labelmap, target_shape)
-    current_shape = volume.shape
-    intended_shape_deficit = target_shape - np.asarray(current_shape)
+# def post_interpolate(volume, labelmap=None, target_shape=[256,256,128]):
+#     volume = do_cropping(volume, target_shape)
+#     if labelmap is not None:
+#         labelmap = do_cropping(labelmap, target_shape)
+#     current_shape = volume.shape
+#     intended_shape_deficit = target_shape - np.asarray(current_shape)
 
-    paddings = [tuple(
-        np.array([np.ceil((pad_tuples / 2) - pad_tuples % 2), np.floor((pad_tuples / 2) + pad_tuples % 2)]).astype(
-            'int32')) for pad_tuples in intended_shape_deficit]
-    paddings = tuple(paddings)
+#     paddings = [tuple(
+#         np.array([np.ceil((pad_tuples / 2) - pad_tuples % 2), np.floor((pad_tuples / 2) + pad_tuples % 2)]).astype(
+#             'int32')) for pad_tuples in intended_shape_deficit]
+#     paddings = tuple(paddings)
 
-    volume = np.pad(volume, paddings, mode='constant')
-    if labelmap is not None:
-        labelmap = np.pad(labelmap, paddings, mode='constant')
+#     volume = np.pad(volume, paddings, mode='constant')
+#     if labelmap is not None:
+#         labelmap = np.pad(labelmap, paddings, mode='constant')
 
-    return volume, labelmap
+#     return volume, labelmap
 
-def do_cropping(source_num_arr, bounding):
-    start = list(map(lambda a, da: a // 2 - da // 2, source_num_arr.shape, bounding))
-    end = list(map(operator.add, start, bounding))
-    for i, val in enumerate(zip(start, end)):
-        if val[0] < 0:
-            start[i] = 0
-            end[i] = source_num_arr.shape[i]
-    slices = tuple(map(slice, tuple(start), tuple(end)))
-    return source_num_arr[slices]
+# def do_cropping(source_num_arr, bounding):
+#     start = list(map(lambda a, da: a // 2 - da // 2, source_num_arr.shape, bounding))
+#     end = list(map(operator.add, start, bounding))
+#     for i, val in enumerate(zip(start, end)):
+#         if val[0] < 0:
+#             start[i] = 0
+#             end[i] = source_num_arr.shape[i]
+#     slices = tuple(map(slice, tuple(start), tuple(end)))
+#     return source_num_arr[slices]
 
 def drop_overlapped_pixels(labelmap, availed_manual_segs_id_list, no_of_class):
     present_seg_idxs = np.unique(labelmap)
@@ -771,22 +771,33 @@ def multi_vol_stitching(images, is_label=False):
 
     for idx, img_1 in enumerate(images_sorted[1:]):
         print(f'{idx}th img for stitching...')
-        #         print("STARTTTTT: ", img_1.affine)
         img_1 = resample_to_output(img_1, TARGET_RESOLUTION, order=3, mode=mode, cval=0.0)
-        #         img_1 = placing_axes(img_1, img_0.affine.copy(), img_0.header.copy(), [2])
-        #         print( img_1.affine)
         target_affine = img_0.affine.copy()
         target_affine[2, 3] = img_1.affine[2, 3].copy()
         target_shape = img_0.shape[:2] + img_1.shape[2:]
-        #         img_1 = placing_axes(img_1, target_affine, img_0.header.copy(), skip_axis=[2])
         img_1 = resample_from_to(img_1, [target_shape, target_affine])
-        #         print(img_1.affine)
         img_0 = vol_stitching(img_0, img_1)
-    #         print(img_0.affine, 'FINISHHHHHHHHH')
-#     reference_labelmap = nb.load(f'temp/ref_img.nii.gz')
-#     img_0 = resample_from_to(img_0, [reference_labelmap.shape, reference_labelmap.affine])
-#     img_resampled = resample_to_output(img_0, TARGET_RESOLUTION, order=3, mode='nearest', cval=0.0)
     return img_0
+
+def visualize_and_save(volid, 
+              vol_root=f'{processed_dir}/label_cropped', 
+              label_root=f'{processed_dir}/volume_cropped',
+             img_save_path = f'{processed_dir}/merged_imgs'):
+    vol = nb.load(f'{vol_root}/{volid}.nii.gz')
+    label = nb.load(f'{label_root}/{volid}.nii.gz')
+
+    im = vol.get_fdata()
+    x = im.shape[0]//2
+    masked = label.get_fdata()
+    plt.figure()
+#     plt.subplot(1,2,1)
+#     plt.imshow(im[x], 'gray', interpolation='none')
+#     plt.subplot(1,2,2)
+    plt.imshow(im[x], 'jet', interpolation='none')
+    plt.imshow(masked[x], 'gray', interpolation='none', alpha=0.5)
+    plt.savefig(f'{img_save_path}/{volid}.png',  dpi=250, quality=95)
+    plt.show()
+    
 
 def visualize_overlay(file_paths):
     for vol_id in file_paths.keys():
@@ -849,31 +860,36 @@ def vol_stitching(im_0, im_1):
     #     placing_axes(stitched_img)
     return stitched_img
 
-def placing_axes(vol, target_affine, target_header=None, skip_axis=None):
-    vol2target = npl.inv(target_affine).dot(vol.affine)
-    source_data = vol.get_fdata()
-    shifts = tuple(vol2target[:3, 3].astype(np.int32))
-#     print(shifts)
-    #     print(source_data.shape)
-    for ax, shift in enumerate(shifts):
-        if skip_axis is not None and ax in skip_axis:
-            continue
-        print(ax, shift)
-        shift = int(shift)
-        if shift < 0:
-            source_data = flip_axis(source_data, axis=ax)
-        print(-np.abs(shift))
-        source_data = np.roll(source_data, -np.abs(shift), axis=ax)
+# def placing_axes(vol, target_affine, target_header=None, skip_axis=None):
+#     vol2target = npl.inv(target_affine).dot(vol.affine)
+#     source_data = vol.get_fdata()
+#     shifts = tuple(vol2target[:3, 3].astype(np.int32))
+# #     print(shifts)
+#     #     print(source_data.shape)
+#     for ax, shift in enumerate(shifts):
+#         if skip_axis is not None and ax in skip_axis:
+#             continue
+#         print(ax, shift)
+#         shift = int(shift)
+#         if shift < 0:
+#             source_data = flip_axis(source_data, axis=ax)
+#         print(-np.abs(shift))
+#         source_data = np.roll(source_data, -np.abs(shift), axis=ax)
 
-    if target_header is None:
-        target_header = nb.Nifti1Header()
-    stitched_labeled_img = nb.Nifti1Image(source_data, target_affine, target_header)
+#     if target_header is None:
+#         target_header = nb.Nifti1Header()
+#     stitched_labeled_img = nb.Nifti1Image(source_data, target_affine, target_header)
 
-    return stitched_labeled_img
-
-
+#     return stitched_labeled_img
 
 
+
+def get_freequent_shape(arr, axis=0):
+    arr = np.array(arr)
+    u, indices = np.unique(arr, return_inverse=True)
+    f_shape = u[np.argmax(np.apply_along_axis(np.bincount, axis, indices.reshape(arr.shape),
+                                    None, np.max(indices) + 1), axis=axis)]
+    return f_shape
 
 def hist_match(volume, histogram_matching_reference_path):
     template_file = nb.load(histogram_matching_reference_path)
@@ -925,74 +941,74 @@ def estimate_weights_per_slice(labels, no_of_class=8):
 
 
 
-def label_stitch_extd(images, is_label=False):
-    if len(images) == 1:
-        return images
-    elif len(images) == 0:
-        raise Exception("Empty Image List!")
+# def label_stitch_extd(images, is_label=False):
+#     if len(images) == 1:
+#         return images
+#     elif len(images) == 0:
+#         raise Exception("Empty Image List!")
 
-#     images_sorted = sorted(images, key=lambda im: im.header['qoffset_z'], reverse=True)
-#     img_0 = images_sorted[0]
+# #     images_sorted = sorted(images, key=lambda im: im.header['qoffset_z'], reverse=True)
+# #     img_0 = images_sorted[0]
 
-#     mode = 'nearest' if is_label else 'constant'
-#     img_0 = resample_to_output(img_0, TARGET_RESOLUTION, order=3, mode=mode, cval=0.0)
+# #     mode = 'nearest' if is_label else 'constant'
+# #     img_0 = resample_to_output(img_0, TARGET_RESOLUTION, order=3, mode=mode, cval=0.0)
     
-    processed_segm = None #np.zeros_like(img_0.get_data())
-    reference_labelmap = None
-    target_affine = images[0][0].affine
-    mode = 'nearest'
-    for im_1, lidx, labelname in images:
-        print(im_1.shape, lidx, labelname)
-        if reference_labelmap is None:
-            reference_labelmap = im_1
-        else:
-            im_1 = resample_from_to(im_1, [reference_labelmap.shape, reference_labelmap.affine], mode=mode)
+#     processed_segm = None #np.zeros_like(img_0.get_data())
+#     reference_labelmap = None
+#     target_affine = images[0][0].affine
+#     mode = 'nearest'
+#     for im_1, lidx, labelname in images:
+#         print(im_1.shape, lidx, labelname)
+#         if reference_labelmap is None:
+#             reference_labelmap = im_1
+#         else:
+#             im_1 = resample_from_to(im_1, [reference_labelmap.shape, reference_labelmap.affine], mode=mode)
             
-        print(im_1.shape, lidx, labelname)    
+#         print(im_1.shape, lidx, labelname)    
     
-        im_1_x, im_1_y, im_1_z = im_1.shape
+#         im_1_x, im_1_y, im_1_z = im_1.shape
         
-        im_1_start_width_x = abs(im_1.header['qoffset_x'])
-        im_1_start_width_y = abs(im_1.header['qoffset_y'])
-        im_1_start_width_z = abs(im_1.header['qoffset_z'])
+#         im_1_start_width_x = abs(im_1.header['qoffset_x'])
+#         im_1_start_width_y = abs(im_1.header['qoffset_y'])
+#         im_1_start_width_z = abs(im_1.header['qoffset_z'])
 
-        spacing_img_1_x, spacing_img_1_y, spacing_img_1_z = im_1.header['pixdim'][1:4]
-        print(spacing_img_1_x, spacing_img_1_y, spacing_img_1_z)
+#         spacing_img_1_x, spacing_img_1_y, spacing_img_1_z = im_1.header['pixdim'][1:4]
+#         print(spacing_img_1_x, spacing_img_1_y, spacing_img_1_z)
 
-        im_1_width_x = im_1_x * spacing_img_1_x
-        im_1_width_y = im_1_y * spacing_img_1_y
-        im_1_width_z = im_1_z * spacing_img_1_z
+#         im_1_width_x = im_1_x * spacing_img_1_x
+#         im_1_width_y = im_1_y * spacing_img_1_y
+#         im_1_width_z = im_1_z * spacing_img_1_z
 
-        im_1_end_width_x = im_1_start_width_x + im_1_width_x
-        im_1_end_width_y = im_1_start_width_y + im_1_width_y
-        im_1_end_width_z = im_1_start_width_z + im_1_width_z
+#         im_1_end_width_x = im_1_start_width_x + im_1_width_x
+#         im_1_end_width_y = im_1_start_width_y + im_1_width_y
+#         im_1_end_width_z = im_1_start_width_z + im_1_width_z
         
-        im_1_end_x = im_1_end_width_x // spacing_img_1_x
-        im_1_end_y = im_1_end_width_y // spacing_img_1_y
-        im_1_end_z = im_1_end_width_z // spacing_img_1_z
+#         im_1_end_x = im_1_end_width_x // spacing_img_1_x
+#         im_1_end_y = im_1_end_width_y // spacing_img_1_y
+#         im_1_end_z = im_1_end_width_z // spacing_img_1_z
         
-        im_1_start_x = im_1_start_width_x // spacing_img_1_x
-        im_1_start_y = im_1_start_width_y // spacing_img_1_y
-        im_1_start_z = im_1_start_width_z // spacing_img_1_z
+#         im_1_start_x = im_1_start_width_x // spacing_img_1_x
+#         im_1_start_y = im_1_start_width_y // spacing_img_1_y
+#         im_1_start_z = im_1_start_width_z // spacing_img_1_z
 
-        im_1_data = im_1.get_fdata()
+#         im_1_data = im_1.get_fdata()
         
-        im_1_data = np.multiply(lidx, im_1_data)
+#         im_1_data = np.multiply(lidx, im_1_data)
         
-        im_1_start_x,im_1_end_x, im_1_start_y,im_1_end_y, im_1_start_z,im_1_end_z = int(im_1_start_x),int(im_1_end_x), int(im_1_start_y),int(im_1_end_y), int(im_1_start_z),int(im_1_end_z)
-        print(im_1_start_x,im_1_end_x, im_1_start_y,im_1_end_y, im_1_start_z,im_1_end_z)
-        if processed_segm is None:
-            processed_segm = np.zeros((im_1_end_x, im_1_end_y, im_1_end_z))
-#             print(processed_segm.shape)
+#         im_1_start_x,im_1_end_x, im_1_start_y,im_1_end_y, im_1_start_z,im_1_end_z = int(im_1_start_x),int(im_1_end_x), int(im_1_start_y),int(im_1_end_y), int(im_1_start_z),int(im_1_end_z)
+#         print(im_1_start_x,im_1_end_x, im_1_start_y,im_1_end_y, im_1_start_z,im_1_end_z)
+#         if processed_segm is None:
+#             processed_segm = np.zeros((im_1_end_x, im_1_end_y, im_1_end_z))
+# #             print(processed_segm.shape)
         
-        processed_segm[int(im_1_start_x):int(im_1_end_x), int(im_1_start_y):int(im_1_end_y), int(im_1_start_z):int(im_1_end_z)] += im_1_data
+#         processed_segm[int(im_1_start_x):int(im_1_end_x), int(im_1_start_y):int(im_1_end_y), int(im_1_start_z):int(im_1_end_z)] += im_1_data
     
-    labelmap = np.round(processed_segm)
+#     labelmap = np.round(processed_segm)
     
-    empty_header = nb.Nifti1Header()
-    s_labelmap = nb.Nifti1Image(labelmap, target_affine, empty_header)
+#     empty_header = nb.Nifti1Header()
+#     s_labelmap = nb.Nifti1Image(labelmap, target_affine, empty_header)
     
-    return None, s_labelmap
+#     return None, s_labelmap
 
 
 
