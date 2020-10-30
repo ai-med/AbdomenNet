@@ -19,7 +19,7 @@ FILE_TO_LABEL_MAP =  {'BACKGROUND': ['background'],'LIVER': ['liver'], 'SPLEEN':
                       'GALLBLADDER': ['gallbladder', 'Gallblader']}
 
 LABEL_EXTENSION_FOR_OVERLAP_REMOVAL = 100 # len(FILE_TO_LABEL_MAP) + 1 # Minimum value
-HIST_MATCHING_VOL_PATH = None
+HIST_MATCHING_VOL_PATH = '/home/abhijit/nas_drive/Data_WholeBody/NAKO/NAKO_200/MRI/100129/100129_3D_GRE_TRA_opp/3D_GRE_TRA_opp_3D_GRE_TRA_1.nii.gz' # None
 
 # 'SUBCUTANEOUS':['subcutaneous', 'subcutan'], 'THYROIDGLAND':['thyroid']
 

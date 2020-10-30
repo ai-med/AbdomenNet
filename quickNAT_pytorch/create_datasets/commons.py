@@ -1,16 +1,9 @@
-import operator
 import os
 import numpy as np
 import nibabel as nb
 import matplotlib.pyplot as plt
 import nrrd
 import glob
-import nibabel
-
-import pickle as p
-import json
-import subprocess
-import getpass
 import matplotlib.pyplot as plt
 
 from nibabel.orientations import axcodes2ornt, ornt_transform, inv_ornt_aff, flip_axis
@@ -18,7 +11,9 @@ from nibabel.affines import from_matvec, to_matvec, apply_affine
 from nibabel.processing import resample_to_output, resample_from_to
 import numpy.linalg as npl
 
-# from nilearn.image import resample_img
+import torch
+import torch.utils.data as data
+
 from global_vars import *
 
 
@@ -355,6 +350,8 @@ def drop_overlapped_pixels(img, availed_manual_segs_id_list):
 def hist_match(img, histogram_matching_reference_path=HIST_MATCHING_VOL_PATH):
     if histogram_matching_reference_path is None:
         return img
+    
+    print(f"Initiating histogram match...")
     volume = img.get_fdata()
     template_file = nb.load(histogram_matching_reference_path)
     template = template_file.get_fdata()
@@ -374,3 +371,32 @@ def hist_match(img, histogram_matching_reference_path=HIST_MATCHING_VOL_PATH):
 
     hist_mapped_volume = interp_t_values[bin_idx].reshape(oldshape)
     return nb.Nifti1Image(hist_mapped_volume, img.affine, img.header)
+
+class MRIDataset(data.Dataset):
+    def __init__(self, X_files, y_files, transforms=None):
+        self.X_files = X_files
+        self.y_files = y_files
+        self.transforms = transforms
+    
+        img_array = list()
+        label_array = list()
+        for vol_f, label_f in zip(self.X_files, self.y_files):
+            img, label = nb.load(vol_f), nb.load(label_f)
+            img_array.extend(np.array(img.get_fdata()))
+            label_array.extend(np.array(label.get_fdata()))
+            img.uncache()
+            label.uncache()
+            
+        X = np.stack(img_array, axis=0) if len(img_array) > 1 else img_array[0]
+        y = np.stack(label_array, axis=0) if len(label_array) > 1 else label_array[0]
+        self.X = X if len(X.shape) == 4 else X[:, np.newaxis, :, :]
+        self.y = y
+        print(self.X.shape, self.y.shape)
+        
+    def __getitem__(self, index):
+        img = torch.from_numpy(self.X[index])
+        label = torch.from_numpy(self.y[index])
+        return img, label
+
+    def __len__(self):
+        return len(self.y)
