@@ -327,11 +327,11 @@ def visualize_and_save(volid, vol_root=f'{processed_dir}/label_cropped', label_r
     label = nb.load(f'{label_root}/{volid}.nii.gz')
 
     im = vol.get_fdata()
-    x = im.shape[0]//2
+    x = im.shape[2]//2
     masked = label.get_fdata()
     plt.figure()
-    plt.imshow(im[x], 'jet', interpolation='none')
-    plt.imshow(masked[x], 'gray', interpolation='none', alpha=0.5)
+    plt.imshow(im[:,:,x], 'gray', interpolation='none')
+    plt.imshow(masked[:,:,x], 'jet', interpolation='none', alpha=0.5)
     plt.savefig(f'{img_save_path}/{volid}.png',  dpi=250, quality=95)
     plt.show()
     
@@ -372,6 +372,17 @@ def hist_match(img, histogram_matching_reference_path=HIST_MATCHING_VOL_PATH):
     hist_mapped_volume = interp_t_values[bin_idx].reshape(oldshape)
     return nb.Nifti1Image(hist_mapped_volume, img.affine, img.header)
 
+def crop(paths, shape):
+    s1, e1, s2, e2, s3, e3 = shape
+    for path in paths:
+        img = nb.load(path)
+        img_data= img.get_fdata()
+        data = img_data[s1:e1, s2:e2, s3:e3]
+        img = nb.Nifti1Image(data, img.affine, img.header)
+        save_path = '/'.join(path.split('/')[:-1])
+        vol_id = path.split('/')[-1].split('.')[0]
+        save_volume(img, f'{save_path}_cropped/{vol_id}')
+        
 class MRIDataset(data.Dataset):
     def __init__(self, X_files, y_files, transforms=None):
         self.X_files = X_files
