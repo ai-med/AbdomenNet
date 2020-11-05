@@ -18,7 +18,7 @@ echo "$file"
  --input-image "${image}" \
  --output ["${NAME}"_corrected.nii.gz , "${NAME}"_bias_field.nii.gz] \
  --shrink-factor 3 \
- --convergence [1000x1000x1000x1000, 0.0005] \
+ --convergence [1000x1000x1000x1000, 0.0003] \
  --verbose
  done
 done

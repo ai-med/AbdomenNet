@@ -5,23 +5,22 @@ INPUT_DIR="/home/abhijit/Jyotirmay/abdominal_segmentation/quickNAT_pytorch/creat
 # for 1st run: *iso_in*rescaled*.nii.gz
 # for 2nd run: *iso_in_corrected_comb_sigm_rescaled*
 
-for file in "${INPUT_DIR}"/100036;
+for file in "${INPUT_DIR}"/*;
 do
 echo "$file"
-echo "${file}/mask.nii.gz"
 
- for image in "${file}"/3D_GRE_TRA_in_3D_GRE_TRA_3_e2_n4_scaled.nii.gz;
+ for image in "${file}"/*n4_scaled*;
  do
  echo "$image"
 
  NAME=`echo "$image" | cut -d'.' -f1`
  echo "$NAME"
- ${ANTSPATH}/N4BiasFieldCorrection --bspline-fitting 1.4x1.4x3 \
+ ${ANTSPATH}/N4BiasFieldCorrection --bspline-fitting 400 \
  -d 3 \
  --input-image "${image}" \
  --output ["${NAME}"_corrected.nii.gz , "${NAME}"_bias_field.nii.gz] \
  --shrink-factor 3 \
- --convergence [500x500x500x500, 0.001] \
+ --convergence [500x500x500x500, 0.003] \
  --verbose
  done
 done
