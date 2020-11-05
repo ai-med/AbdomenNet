@@ -1,9 +1,9 @@
 export LD_LIBRARY_PATH="/home/abhijit/nas_drive/Software/ANTS/install/lib"
 ANTSPATH=/home/abhijit/nas_drive/Software/ANTS/install/bin
 
-INPUT_DIR="/home/abhijit/Jyotirmay/abdominal_segmentation/quickNAT_pytorch/create_datasets/temp/UKB/n4_corrected_2/vol"
+INPUT_DIR="/home/abhijit/Jyotirmay/abdominal_segmentation/quickNAT_pytorch/create_datasets/temp/NAKO/n4_corrected_2/vol"
 
-for file in "${INPUT_DIR}"/*;
+for file in "${INPUT_DIR}"/100036;
 do
 echo "$file"
 
@@ -13,12 +13,12 @@ echo "$file"
 
  NAME=`echo "$image" | cut -d'.' -f1`
  echo "$NAME"
- ${ANTSPATH}/N4BiasFieldCorrection --bspline-fitting 400 \
+ ${ANTSPATH}/N4BiasFieldCorrection --bspline-fitting 50 \
  -d 3 \
  --input-image "${image}" \
  --output ["${NAME}"_corrected.nii.gz , "${NAME}"_bias_field.nii.gz] \
  --shrink-factor 3 \
- --convergence [500x500x500x500, 0.0001] \
+ --convergence [1000x1000x1000x1000, 0.0005] \
  --verbose
  done
 done

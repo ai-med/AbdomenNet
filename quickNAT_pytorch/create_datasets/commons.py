@@ -327,11 +327,11 @@ def visualize_and_save(volid, vol_root=f'{processed_dir}/label_cropped', label_r
     label = nb.load(f'{label_root}/{volid}.nii.gz')
 
     im = vol.get_fdata()
-    x = im.shape[2]//2
+    x = im.shape[1]//2
     masked = label.get_fdata()
     plt.figure()
-    plt.imshow(im[:,:,x], 'gray', interpolation='none')
-    plt.imshow(masked[:,:,x], 'jet', interpolation='none', alpha=0.5)
+    plt.imshow(im[:,x,:], 'gray', interpolation='none')
+    plt.imshow(masked[:,x,:], 'jet', interpolation='none', alpha=0.5)
     plt.savefig(f'{img_save_path}/{volid}.png',  dpi=250, quality=95)
     plt.show()
     
