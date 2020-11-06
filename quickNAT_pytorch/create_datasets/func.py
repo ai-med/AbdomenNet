@@ -7,6 +7,9 @@ import nrrd
 import glob
 import nibabel
 
+import SimpleITK as sitk
+import sys
+
 import pickle as p
 import json
 import subprocess
@@ -20,6 +23,39 @@ import numpy.linalg as npl
 
 # from nilearn.image import resample_img
 from global_vars import *
+
+def SITK_N4_normalization(in_input_file, opp_file, output_file, shrink_factor=3,
+                          mask=None, iteration=500, fittingLevel=4, tolerance=1e-03,
+                          spline_param=200):
+#     sitk.GetImageFromArray(nb.load(in_input_file).get_fdata())
+# sitk.Cast
+#     inputImage = sitk.Cast(sitk.GetImageFromArray(nb.load(in_input_file).get_fdata()), sitk.sitkFloat32) #sitk.ReadImage(in_input_file, sitk.sitkFloat32)
+#     oppImage = sitk.Cast(sitk.GetImageFromArray(nb.load(opp_file).get_fdata()), sitk.sitkFloat32) #sitk.ReadImage(opp_file, sitk.sitkFloat32)
+    inputImage = sitk.ReadImage(in_input_file, sitk.sitkFloat32)
+    oppImage = sitk.ReadImage(opp_file, sitk.sitkFloat32)
+    image = inputImage
+    maskImage = sitk.OtsuThreshold(inputImage, 0, 1,200)
+
+    if shrink_factor != None:
+        image = sitk.Shrink(inputImage,
+                                 [int(shrink_factor)] * inputImage.GetDimension())
+        maskImage = sitk.Shrink(maskImage,
+                                [int(shrink_factor)] * inputImage.GetDimension())
+    corrector = sitk.N4BiasFieldCorrectionImageFilter()
+    numberFittingLevels = 4
+    if fittingLevel != None:
+        numberFittingLevels = int(fittingLevel)
+    if iteration != None:
+        corrector.SetMaximumNumberOfIterations([int(iteration)]
+                                               * numberFittingLevels)
+    corrector.SetConvergenceThreshold(tolerance)
+    
+    low_res_output = corrector.Execute(image, maskImage)
+    log_bias_field = corrector.GetLogBiasFieldAsImage(inputImage)
+    output = oppImage / sitk.Exp( log_bias_field )
+    sitk.WriteImage(output, output_file)
+    print('done')
+    return output_file
 
 def rescale(in_image, vol_id, original_filename):
     new_filename = original_filename.split('/')[-1].split('.')[0]

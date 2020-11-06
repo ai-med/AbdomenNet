@@ -6,6 +6,9 @@ import nrrd
 import glob
 import matplotlib.pyplot as plt
 
+import SimpleITK as sitk
+import sys
+
 from nibabel.orientations import axcodes2ornt, ornt_transform, inv_ornt_aff, flip_axis
 from nibabel.affines import from_matvec, to_matvec, apply_affine
 from nibabel.processing import resample_to_output, resample_from_to
@@ -117,6 +120,35 @@ def rescale(in_image, vol_id, original_filename):
         MIN= u_min,
         MAX= u_max
     )
+
+def SITK_N4_normalization(in_input_file, opp_file, output_file, shrink_factor=3,
+                          mask=None, iteration=500, fittingLevel=4, tolerance=1e-03,
+                          spline_param=200):
+    inputImage = sitk.ReadImage(in_input_file, sitk.sitkFloat32)
+    oppImage = sitk.ReadImage(opp_file, sitk.sitkFloat32)
+    image = inputImage
+    maskImage = sitk.OtsuThreshold(inputImage, 0, 1,200)
+
+    if shrink_factor != None:
+        image = sitk.Shrink(inputImage,
+                                 [int(shrink_factor)] * inputImage.GetDimension())
+        maskImage = sitk.Shrink(maskImage,
+                                [int(shrink_factor)] * inputImage.GetDimension())
+    corrector = sitk.N4BiasFieldCorrectionImageFilter()
+    numberFittingLevels = 4
+    if fittingLevel != None:
+        numberFittingLevels = int(fittingLevel)
+    if iteration != None:
+        corrector.SetMaximumNumberOfIterations([int(iteration)]
+                                               * numberFittingLevels)
+    corrector.SetConvergenceThreshold(tolerance)
+    
+    low_res_output = corrector.Execute(image, maskImage)
+    log_bias_field = corrector.GetLogBiasFieldAsImage(inputImage)
+    output = oppImage / sitk.Exp( log_bias_field )
+    sitk.WriteImage(output, output_file)
+    print('done')
+    return output_file
 
 def create_if_not(path):
     if not os.path.exists(path):

@@ -1,5 +1,5 @@
 
-dset = 'NAKO'
+dset = 'UKB'
 DATASET = dset.upper()
 dataset = dset.lower()
 DEFAULT_FILE_TYPE = 'nifti'
@@ -23,7 +23,7 @@ HIST_MATCHING_VOL_PATH = '/home/abhijit/nas_drive/Data_WholeBody/NAKO/NAKO_200/M
 
 # 'SUBCUTANEOUS':['subcutaneous', 'subcutan'], 'THYROIDGLAND':['thyroid']
 
-volume_txt_file = f'datasets/{dataset}/all.txt'
+volume_txt_file = f'datasets/{dataset}/volumes.txt'
 if DATASET == 'KORA':
     data_dir = "/home/abhijit/nas_drive/Data_WholeBody/KORA/KORA_all/KORA_Nifti"
 elif DATASET == 'NAKO':
