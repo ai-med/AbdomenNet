@@ -1,5 +1,5 @@
 
-dset = 'UKB'
+dset = 'KORA'
 DATASET = dset.upper()
 dataset = dset.lower()
 DEFAULT_FILE_TYPE = 'nifti'

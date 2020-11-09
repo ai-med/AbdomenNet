@@ -362,8 +362,8 @@ def visualize_and_save(volid, vol_root=f'{processed_dir}/label_cropped', label_r
     x = im.shape[1]//2
     masked = label.get_fdata()
     plt.figure()
-    plt.imshow(im[:,x,:], 'gray', interpolation='none')
-    plt.imshow(masked[:,x,:], 'jet', interpolation='none', alpha=0.5)
+    plt.imshow(np.rot90(im[:,x,:]), 'gray', interpolation='none')
+    plt.imshow(np.rot90(masked[:,x,:]), 'jet', interpolation='none', alpha=0.5)
     plt.savefig(f'{img_save_path}/{volid}.png',  dpi=250, quality=95)
     plt.show()
     
