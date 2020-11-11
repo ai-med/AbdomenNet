@@ -425,8 +425,15 @@ class MRIDataset(data.Dataset):
         label_array = list()
         for vol_f, label_f in zip(self.X_files, self.y_files):
             img, label = nb.load(vol_f), nb.load(label_f)
-            img_array.extend(np.array(img.get_fdata()))
-            label_array.extend(np.array(label.get_fdata()))
+            img_data = np.array(img.get_fdata())
+            label_data = np.array(label.get_fdata())
+            
+            # Transforming to Axial Manually.
+            img_data = np.rollaxis(img_data, 2, 0)
+            label_data = np.rollaxis(label_data, 2, 0)
+            
+            img_array.extend(img_data)
+            label_array.extend(label_data)
             img.uncache()
             label.uncache()
             

@@ -10,8 +10,50 @@ from utils.data_utils import get_imdb_dataset, get_imdb_dataset_3channel, get_im
 from utils.log_utils import LogWriter
 import logging
 import shutil
+import glob
+import nibabel as nb
+import numpy as np
+# from create_datasets.commons import MRIDataset
+import torch.utils.data as data
 
 torch.set_default_tensor_type('torch.FloatTensor')
+
+
+class MRIDataset(data.Dataset):
+    def __init__(self, X_files, y_files, transforms=None):
+        self.X_files = X_files
+        self.y_files = y_files
+        self.transforms = transforms
+
+        img_array = list()
+        label_array = list()
+        for vol_f, label_f in zip(self.X_files, self.y_files):
+            img, label = nb.load(vol_f), nb.load(label_f)
+            img_data = np.array(img.get_fdata())
+            label_data = np.array(label.get_fdata())
+
+            # Transforming to Axial Manually.
+            img_data = np.rollaxis(img_data, 2, 0)
+            label_data = np.rollaxis(label_data, 2, 0)
+
+            img_array.extend(img_data)
+            label_array.extend(label_data)
+            img.uncache()
+            label.uncache()
+
+        X = np.stack(img_array, axis=0) if len(img_array) > 1 else img_array[0]
+        y = np.stack(label_array, axis=0) if len(label_array) > 1 else label_array[0]
+        self.X = X if len(X.shape) == 4 else X[:, np.newaxis, :, :]
+        self.y = y
+        print(self.X.shape, self.y.shape)
+
+    def __getitem__(self, index):
+        img = torch.from_numpy(self.X[index])
+        label = torch.from_numpy(self.y[index])
+        return img, label
+
+    def __len__(self):
+        return len(self.y)
 
 
 def load_data(data_params):
@@ -28,11 +70,25 @@ def load_data(data_params):
 
 
 def train(train_params, common_params, data_params, net_params):
-    train_data, test_data = load_data(data_params)
+    # train_data, test_data = load_data(data_params)
+    #
+    # train_loader = torch.utils.data.DataLoader(train_data, batch_size=train_params['train_batch_size'], shuffle=True,
+    #                                            num_workers=4, pin_memory=True)
+    # val_loader = torch.utils.data.DataLoader(test_data, batch_size=train_params['val_batch_size'], shuffle=False,
+    #                                          num_workers=4, pin_memory=True)
 
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=train_params['train_batch_size'], shuffle=True,
+    train_volumes = sorted(glob.glob(f"{data_params['data_dir']}/volume_cropped_train/**.nii.gz"))
+    train_labels = sorted(glob.glob(f"{data_params['data_dir']}/label_cropped_train/**.nii.gz"))
+
+    test_volumes = sorted(glob.glob(f"{data_params['data_dir']}/volume_cropped_test/**.nii.gz"))
+    test_labels = sorted(glob.glob(f"{data_params['data_dir']}/label_cropped_test/**.nii.gz"))
+
+    ds_train = MRIDataset(train_volumes, train_labels)
+    train_loader = torch.utils.data.DataLoader(ds_train, batch_size=train_params['train_batch_size'], shuffle=True,
                                                num_workers=4, pin_memory=True)
-    val_loader = torch.utils.data.DataLoader(test_data, batch_size=train_params['val_batch_size'], shuffle=False,
+
+    ds_test = MRIDataset(test_volumes, test_labels)
+    val_loader = torch.utils.data.DataLoader(ds_test, batch_size=train_params['train_batch_size'], shuffle=False,
                                              num_workers=4, pin_memory=True)
 
     if train_params['use_pre_trained']:
@@ -209,7 +265,7 @@ if __name__ == '__main__':
     parser.add_argument('--setting_path', '-sp', required=False, help='optional path to settings_eval_nako.ini')
     args = parser.parse_args()
 
-    settings = Settings('settings_kora.ini')
+    settings = Settings('/home/abhijit/Jyotirmay/abdominal_segmentation/quickNAT_pytorch/settings_merged_jj.ini')
     common_params, data_params, net_params, train_params, eval_params = settings['COMMON'], settings['DATA'], \
                                                                         settings[
                                                                             'NETWORK'], settings['TRAINING'], \

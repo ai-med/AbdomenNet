@@ -1,7 +1,9 @@
 import os
 from quicknat import QuickNat
 import nibabel as nib
+import nibabel as nb
 import numpy as np
+
 import logging
 import torch
 import csv
@@ -172,9 +174,12 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
                                           torch.tensor(water).type(torch.FloatTensor), \
                                           torch.tensor(labelmap).type(torch.LongTensor)
             else:
-                volume, labelmap, class_weights, weights, header = du.load_and_preprocess(file_path,
-                                                                                      orientation=orientation,
-                                                                                      remap_config=remap_config)
+                # volume, labelmap, class_weights, weights, header = du.load_and_preprocess(file_path,
+                #                                                                       orientation=orientation,
+                #                                                                       remap_config=remap_config)
+                print(file_path)
+                img, label = nb.load(file_path[0]), nb.load(file_path[1])
+                volume, labelmap, class_weights, weights, header = img.get_fdata(), label.get_fdata(), None, None, img.header
 
             volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
             volume, labelmap = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(labelmap).type(

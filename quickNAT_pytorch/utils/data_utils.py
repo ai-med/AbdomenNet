@@ -466,7 +466,7 @@ def load_file_paths(data_dir, label_dir, data_id, volumes_txt_file=None):
     print('data id ', data_id)
     if data_id == 'KORA':
         file_paths = [
-            [os.path.join(data_dir, data_id, 'data', vol, 'transformed_corrected.nii.gz'), os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+            [os.path.join(data_dir, f'{vol}.nii.gz'), os.path.join(label_dir, f'{vol}.nii.gz')]
             for
             vol in volumes_to_use]
     elif data_id == 'NAKO':
