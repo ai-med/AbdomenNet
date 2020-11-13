@@ -154,8 +154,8 @@ class Solver(object):
                     self.logWriter.loss_per_epoch(loss_arr, phase, epoch)
                     index = np.random.choice(len(dataloaders[phase].dataset.X), 3, replace=False)
                     print("index")
-                    #self.logWriter.image_per_epoch(model.predict(dataloaders[phase].dataset.X[index], self.device),
-                    #                               dataloaders[phase].dataset.y[index], phase, epoch)
+                    self.logWriter.image_per_epoch(dataloaders[phase].dataset.X[index], model.predict(dataloaders[phase].dataset.X[index], self.device),
+                                                  dataloaders[phase].dataset.y[index], phase, epoch)
                     self.logWriter.cm_per_epoch(phase, out_arr, y_arr, epoch)
                     ds_mean = self.logWriter.dice_score_per_epoch(phase, out_arr, y_arr, epoch)
                     if phase == 'val':

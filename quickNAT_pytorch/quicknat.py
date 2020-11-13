@@ -104,7 +104,7 @@ class QuickNat(nn.Module):
             X = torch.tensor(X, requires_grad=False).type(torch.FloatTensor).cuda(device, non_blocking=True)
         elif type(X) is torch.Tensor and not X.is_cuda:
             X = X.type(torch.FloatTensor).cuda(device, non_blocking=True)
-        X = X.permute(1, 0, 2, 3)
+        # X = X.permute(1, 0, 2, 3)
         print('after permute ', X.shape)
         if enable_dropout:
             self.enable_test_dropout()

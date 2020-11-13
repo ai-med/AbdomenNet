@@ -81,11 +81,15 @@ def fetch_class_labels_from_filemap(labelmap_path, file_labels=FILE_TO_LABEL_MAP
     other_file = ['COMB']
     label_idx, label = None, None
     for lidx, file_label_key in enumerate(file_labels.keys()):
+        _ = [print(label.replace(" ", "").upper(), labelmap_path.replace(" ", "").upper()) for label in file_labels[file_label_key]]
+        print([label.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for label in file_labels[file_label_key]], np.any([label.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for label in file_labels[file_label_key]]))
         ifPresent = np.any([label.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for label in file_labels[file_label_key]])
         if ifPresent:
             label_idx, label = lidx, file_label_key
             break
     else:
+        _ = [print(other.replace(" ", "").upper(), labelmap_path.replace(" ", "").upper()) for other in other_file]
+        print(np.any([other.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for other in other_file]))
         ifExceptedFilePresent = np.any([other.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for other in other_file])
         if not ifExceptedFilePresent:
 #             raise Exception(f'No Matched Label Found for {labelmap_path}!')
@@ -402,6 +406,17 @@ def hist_match(img, histogram_matching_reference_path=HIST_MATCHING_VOL_PATH):
     interp_t_values = np.interp(s_quantiles, t_quantiles, t_values)
 
     hist_mapped_volume = interp_t_values[bin_idx].reshape(oldshape)
+    return nb.Nifti1Image(hist_mapped_volume, img.affine, img.header)
+
+def intensity_matching(img, histogram_matching_reference_path):
+    volume = img.get_fdata()
+    template_file = nb.load(histogram_matching_reference_path)
+    template = template_file.get_fdata()
+    m_i = np.mean(volume)
+    m_r = np.mean(template)
+    s_i = np.std(volume)
+    s_r = np.std(template)
+    hist_mapped_volume = (volume - m_i) * s_r / s_i + m_r
     return nb.Nifti1Image(hist_mapped_volume, img.affine, img.header)
 
 def crop(paths, shape):

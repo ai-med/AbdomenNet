@@ -179,7 +179,10 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
                 #                                                                       remap_config=remap_config)
                 print(file_path)
                 img, label = nb.load(file_path[0]), nb.load(file_path[1])
-                volume, labelmap, class_weights, weights, header = img.get_fdata(), label.get_fdata(), None, None, img.header
+                volume, labelmap, class_weights, weights, header, affine = img.get_fdata(), label.get_fdata(), None, None, img.header, img.affine
+                if orientation == 'AXI':
+                    volume = np.rollaxis(volume, 2, 0)
+                    labelmap = np.rollaxis(labelmap, 2, 0)
 
             volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
             volume, labelmap = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(labelmap).type(
@@ -208,33 +211,37 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
 
             # before saving, need to rotate back to original orientation.
             # coronal <-> axial, sagittal always stays the same
-            if orientation == 'COR':
-                new_orientation = 'AXI'
-            elif orientation == 'AXI':
-                new_orientation = 'COR'
-            else:
-                new_orientation = 'SAG'
-
-            print(new_orientation)
-            volume_prediction = rotate_orientation(volume_prediction, new_orientation)
+            # if orientation == 'COR':
+            #     new_orientation = 'AXI'
+            # elif orientation == 'AXI':
+            #     new_orientation = 'COR'
+            # else:
+            #     new_orientation = 'SAG'
+            #
+            # print(new_orientation)
+            # volume_prediction = rotate_orientation(volume_prediction, new_orientation)
             print("evaluator here")
             # reverse remap labels, to be able to compare output to freesurfer GT
             # volume_prediction = reverse_remap_labels(volume_prediction, remap_config)
 
             # Copy header affine
-            if data_id == 'MALC_parcel':
-                Mat = header.get_affine()
-            else:
-                Mat = np.array([
-                    header['srow_x'],
-                    header['srow_y'],
-                    header['srow_z'],
-                    [0, 0, 0, 1]
-                ])
+            # if data_id == 'MALC_parcel':
+            #     Mat = header.get_affine()
+            # else:
+            #     Mat = np.array([
+            #         header['srow_x'],
+            #         header['srow_y'],
+            #         header['srow_z'],
+            #         [0, 0, 0, 1]
+            #     ])
             # Apply original image affine to prediction volume
             header.set_data_dtype('int16')
-            nifti_img = nib.MGHImage(np.squeeze(volume_prediction), Mat, header=header)
-            nib.save(nifti_img, os.path.join(prediction_path, volumes_to_use[vol_idx] + str('.mgz')))
+            volume_prediction = np.squeeze(volume_prediction)
+            volume = np.squeeze(volume)
+            nifti_img = nib.Nifti1Image(volume_prediction, affine, header=header)
+            volume = nib.Nifti1Image(volume, affine, header=header)
+            nib.save(nifti_img, os.path.join(prediction_path, volumes_to_use[vol_idx] + str('.nii.gz')))
+            nib.save(volume, os.path.join(prediction_path, volumes_to_use[vol_idx] + str('_volume.nii.gz')))
             if logWriter:
                 logWriter.plot_dice_score('val', 'eval_dice_score', volume_dice_score, volumes_to_use[vol_idx],
                                           np.arange(0, num_classes), num_classes)

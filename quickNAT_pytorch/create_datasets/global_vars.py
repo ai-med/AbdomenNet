@@ -14,8 +14,13 @@ DEFAULT_OUTPUT_PATH = './temp'
 DEFAULT_LINSPACE = 30
 
 
-FILE_TO_LABEL_MAP =  {'BACKGROUND': ['background'],'LIVER': ['liver'], 'SPLEEN': ['spleen', 'spl'],'KIDNEY(RIGHT)':['kidney_r', 'kidney (right)'],
-                      'KIDNEY(LEFT)':['kidney_l', 'kidney (left)'], 'ADRENALGLAND':['adrenal', 'adremal'], 'PANCREAS': ['pancreas'],
+FILE_TO_LABEL_MAP =  {'BACKGROUND': ['background'],
+                      'LIVER': ['liver'], 
+                      'SPLEEN': ['spleen', 'spl'],
+                      'KIDNEY(RIGHT)':['kidney_r', 'kidney (right)', 'kidney (right).nrrd', 'kidney (rechts)'],
+                      'KIDNEY(LEFT)':['kidney_l', 'kidney (left)', 'kidney (left).nrrd', 'kidney (links)'], 
+                      'ADRENALGLAND':['adrenal', 'adremal', 'adrenalgland(left)', 'adrenalgland(right)','adrenalgland(left).nrrd', 'adrenalgland(right).nrrd', 'adrenalgalnd(right).nrrd'], 
+                      'PANCREAS': ['pancreas'],
                       'GALLBLADDER': ['gallbladder', 'Gallblader']}
 
 LABEL_EXTENSION_FOR_OVERLAP_REMOVAL = 100 # len(FILE_TO_LABEL_MAP) + 1 # Minimum value

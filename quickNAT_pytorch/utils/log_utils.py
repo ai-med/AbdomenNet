@@ -139,22 +139,27 @@ class LogWriter(object):
         ax.xaxis.tick_bottom()
         self.writer['val'].add_figure(caption, fig)
 
-    def image_per_epoch(self, prediction, ground_truth, phase, epoch):
+    def image_per_epoch(self, volume, prediction, ground_truth, phase, epoch):
         print("Sample Images...", end='', flush=True)
-        ncols = 2
+        ncols = 3
         nrows = len(prediction)
         print("len pred", len(prediction))
         print('in log image, len prediction ', nrows)
         print('len gt ', len(ground_truth))
         fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=(10, 20))
-
+        print('volume shape:', volume.shape)
+        volume = np.squeeze(volume)
+        print('volume shape after squeeze:', volume.shape)
         for i in range(nrows):
-            ax[i][0].imshow(prediction[i], cmap='CMRmap', vmin=0, vmax=self.num_class - 1)
-            ax[i][0].set_title("Predicted", fontsize=10, color="blue")
+            ax[i][0].imshow(volume[i], cmap='gray')
+            ax[i][0].set_title("Volume", fontsize=10, color="blue")
             ax[i][0].axis('off')
-            ax[i][1].imshow(ground_truth[i], cmap='CMRmap', vmin=0, vmax=self.num_class - 1)
-            ax[i][1].set_title("Ground Truth", fontsize=10, color="blue")
+            ax[i][1].imshow(prediction[i], cmap='CMRmap', vmin=0, vmax=self.num_class - 1)
+            ax[i][1].set_title("Predicted", fontsize=10, color="blue")
             ax[i][1].axis('off')
+            ax[i][2].imshow(ground_truth[i], cmap='CMRmap', vmin=0, vmax=self.num_class - 1)
+            ax[i][2].set_title("Ground Truth", fontsize=10, color="blue")
+            ax[i][2].axis('off')
         fig.set_tight_layout(True)
         self.writer[phase].add_figure('sample_prediction/' + phase, fig, epoch)
         print('DONE', flush=True)

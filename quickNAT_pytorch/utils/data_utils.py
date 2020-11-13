@@ -471,16 +471,24 @@ def load_file_paths(data_dir, label_dir, data_id, volumes_txt_file=None):
             vol in volumes_to_use]
     elif data_id == 'NAKO':
         file_paths = [
-            [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
-             os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+            [os.path.join(data_dir, f'{vol}.nii.gz'), os.path.join(label_dir, f'{vol}.nii.gz')]
             for
             vol in volumes_to_use]
+        # file_paths = [
+        #     [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
+        #      os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+        #     for
+        #     vol in volumes_to_use]
     elif data_id == 'UKB':
         file_paths = [
-            [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
-             os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+            [os.path.join(data_dir, f'{vol}.nii.gz'), os.path.join(label_dir, f'{vol}.nii.gz')]
             for
             vol in volumes_to_use]
+        # file_paths = [
+        #     [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
+        #      os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+        #     for
+        #     vol in volumes_to_use]
     else:
         raise ValueError("Invalid entry, valid options are MALC, ADNI, CANDI and IBSR")
 

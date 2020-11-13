@@ -77,11 +77,11 @@ def train(train_params, common_params, data_params, net_params):
     # val_loader = torch.utils.data.DataLoader(test_data, batch_size=train_params['val_batch_size'], shuffle=False,
     #                                          num_workers=4, pin_memory=True)
 
-    train_volumes = sorted(glob.glob(f"{data_params['data_dir']}/volume_cropped_train/**.nii.gz"))
-    train_labels = sorted(glob.glob(f"{data_params['data_dir']}/label_cropped_train/**.nii.gz"))
+    train_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume/**.nii.gz"))
+    train_labels = sorted(glob.glob(f"{data_params['data_dir']}/train/label/**.nii.gz"))
 
-    test_volumes = sorted(glob.glob(f"{data_params['data_dir']}/volume_cropped_test/**.nii.gz"))
-    test_labels = sorted(glob.glob(f"{data_params['data_dir']}/label_cropped_test/**.nii.gz"))
+    test_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume/**.nii.gz"))
+    test_labels = sorted(glob.glob(f"{data_params['data_dir']}/test/label/**.nii.gz"))
 
     ds_train = MRIDataset(train_volumes, train_labels)
     train_loader = torch.utils.data.DataLoader(ds_train, batch_size=train_params['train_batch_size'], shuffle=True,
