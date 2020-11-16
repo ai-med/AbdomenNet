@@ -20,7 +20,7 @@ class Solver(object):
                  exp_name,
                  device,
                  num_class,
-                 optim=torch.optim.SGD,
+                 optim=torch.optim.Adam,
                  optim_args={},
                  loss_func=additional_losses.CombinedLoss(),
                  model_name='quicknat',
@@ -103,11 +103,12 @@ class Solver(object):
                 for i_batch, sample_batched in enumerate(dataloaders[phase]):
                     X = sample_batched[0].type(torch.FloatTensor)
                     y = sample_batched[1].type(torch.LongTensor)
-                    # w = sample_batched[2].type(torch.FloatTensor)
-                    # wd = sample_batched[3].type(torch.FloatTensor)
+                    w = sample_batched[3].type(torch.FloatTensor)
+                    wd = sample_batched[2].type(torch.FloatTensor)
                     #print('dice weights ', wd.shape)
                     if model.is_cuda:
-                        X, y = X.cuda(self.device, non_blocking=True), y.cuda(self.device, non_blocking=True)
+                        X, y, w, wd = X.cuda(self.device, non_blocking=True), y.cuda(self.device, non_blocking=True), \
+                                       w.cuda(self.device, non_blocking=True), wd.cuda(self.device, non_blocking=True)
                     #print('input shape ', X.shape)
                     output = model(X)
                     #print(X.shape)
@@ -125,7 +126,7 @@ class Solver(object):
                     #print('max target ', torch.max(y))
                     #print('min output ', torch.min(output))
                     #print('max output ', torch.max(output))
-                    loss = self.loss_func(output, y)
+                    loss = self.loss_func(output, y, wd)
                     if phase == 'train':
                         optim.zero_grad()
                         loss.backward()
@@ -141,7 +142,7 @@ class Solver(object):
                     out_list.append(batch_output.cpu())
                     y_list.append(y.cpu())
 
-                    del X, y, output, batch_output, loss
+                    del X, y, output, batch_output, loss, wd, w
                     torch.cuda.empty_cache()
                     if phase == 'val':
                         if i_batch != len(dataloaders[phase]) - 1:

@@ -19,7 +19,8 @@ FILE_TO_LABEL_MAP =  {'BACKGROUND': ['background'],
                       'SPLEEN': ['spleen', 'spl'],
                       'KIDNEY(RIGHT)':['kidney_r', 'kidney (right)', 'kidney (right).nrrd', 'kidney (rechts)'],
                       'KIDNEY(LEFT)':['kidney_l', 'kidney (left)', 'kidney (left).nrrd', 'kidney (links)'], 
-                      'ADRENALGLAND':['adrenal', 'adremal', 'adrenalgland(left)', 'adrenalgland(right)','adrenalgland(left).nrrd', 'adrenalgland(right).nrrd', 'adrenalgalnd(right).nrrd'], 
+                      'ADRENAL(RIGHT)':['adremalgland(right)', 'adrenalgland(right)','adrenalgalnd(right)'], 
+                      'ADRENAL(LEFT)': ['adremalgland(left)', 'adrenalgland(left)', 'adrenalgalnd(left)', 'adrenalgland(links)'],
                       'PANCREAS': ['pancreas'],
                       'GALLBLADDER': ['gallbladder', 'Gallblader']}
 

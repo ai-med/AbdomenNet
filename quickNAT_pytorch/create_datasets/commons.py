@@ -429,7 +429,34 @@ def crop(paths, shape):
         save_path = '/'.join(path.split('/')[:-1])
         vol_id = path.split('/')[-1].split('.')[0]
         save_volume(img, f'{save_path}_cropped/{vol_id}')
-        
+
+def estimate_weights_mfb(labels, no_of_class=9):
+    class_weights = np.zeros_like(labels)
+    unique, counts = np.unique(labels, return_counts=True)
+    median_freq = np.median(counts)
+    weights = np.zeros(no_of_class)
+    for i, label in enumerate(unique):
+        class_weights += (median_freq // counts[i]) * np.array(labels == label)
+        weights[int(label)] = median_freq // counts[i]
+
+    grads = np.gradient(labels)
+    edge_weights = (grads[0] ** 2 + grads[1] ** 2) > 0
+    class_weights += 2 * edge_weights
+
+    return class_weights, weights
+
+def estimate_weights_per_slice(labels, no_of_class=9):
+    weights_per_slice = []
+    for slice_ in labels:
+        unique, counts = np.unique(slice_, return_counts=True)
+        median_freq = np.median(counts)
+        weights = np.zeros(no_of_class)
+        for i, label in enumerate(unique):
+            weights[int(label)] = median_freq // counts[i]
+        weights_per_slice.append(weights)
+
+    return np.array(weights_per_slice)
+
 class MRIDataset(data.Dataset):
     def __init__(self, X_files, y_files, transforms=None):
         self.X_files = X_files
