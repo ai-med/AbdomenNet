@@ -20,7 +20,7 @@ class Solver(object):
                  exp_name,
                  device,
                  num_class,
-                 optim=torch.optim.Adam,
+                 optim=torch.optim.SGD,
                  optim_args={},
                  loss_func=additional_losses.CombinedLoss(),
                  model_name='quicknat',
@@ -126,11 +126,12 @@ class Solver(object):
                     #print('max target ', torch.max(y))
                     #print('min output ', torch.min(output))
                     #print('max output ', torch.max(output))
-                    loss = self.loss_func(output, y, wd)
+                    loss = self.loss_func(output, y)
                     if phase == 'train':
                         optim.zero_grad()
                         loss.backward()
                         optim.step()
+                        # scheduler.step()
                         if i_batch % self.log_nth == 0:
                             self.logWriter.loss_per_iter(loss.item(), i_batch, current_iteration)
                         current_iteration += 1
