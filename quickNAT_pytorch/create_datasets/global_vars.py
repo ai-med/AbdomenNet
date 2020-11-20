@@ -10,7 +10,7 @@ DEFAULT_VIEW = ['Saggital', 'Coronal', 'Axial']
 DEFAULT_REFERENCE_VIEW = 'Sagittal'
 OPTIMIZATION = 'N4'  # Intensity, Min-Max, Fat-Water-Swap
 IS_CROPPING = True
-DEFAULT_OUTPUT_PATH = './temp2'
+DEFAULT_OUTPUT_PATH = 'temp2'
 DEFAULT_LINSPACE = 30
 
 

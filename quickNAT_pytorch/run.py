@@ -125,12 +125,12 @@ def train(train_params, common_params, data_params, net_params):
     # val_loader = torch.utils.data.DataLoader(test_data, batch_size=train_params['val_batch_size'], shuffle=False,
     #                                          num_workers=4, pin_memory=True)
 
-    train_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume_minmax/**.nii.gz"))
+    train_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume_intensity/**.nii.gz"))
     train_labels = sorted(glob.glob(f"{data_params['data_dir']}/train/label/**.nii.gz"))
     train_class_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_class_weights/**.npy"))
     train_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_weights/**.npy"))
 
-    test_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume_minmax/**.nii.gz"))
+    test_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume_intensity/**.nii.gz"))
     test_labels = sorted(glob.glob(f"{data_params['data_dir']}/test/label/**.nii.gz"))
     test_class_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_class_weights/**.npy"))
     test_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_weights/**.npy"))
@@ -151,15 +151,21 @@ def train(train_params, common_params, data_params, net_params):
         elif net_params['type'] == 'fastsurfer':
             model = FastSurferCNN(net_params)
 
-    # {"lr": train_params['learning_rate'],
-    #  "weight_decay": train_params['optim_weight_decay']},
+       # {"lr": train_params['learning_rate'],
+    #   "momentum": train_params['momentum'],
+    #   "weight_decay": train_params['optim_weight_decay']},
+# {"lr": train_params['learning_rate'],
+#                                    "betas": train_params['optim_betas'],
+#                                    "eps": train_params['optim_eps'],
+#                                    "weight_decay": train_params['optim_weight_decay']},
 
     solver = Solver(model,
                     device=common_params['device'],
                     num_class=net_params['num_class'],
-                    optim_args=    {"lr": train_params['learning_rate'],
-                         "momentum": train_params['momentum'],
-                         "weight_decay": train_params['optim_weight_decay']},
+                    optim_args={"lr": train_params['learning_rate'],
+                                   "betas": train_params['optim_betas'],
+                                   "eps": train_params['optim_eps'],
+                                   "weight_decay": train_params['optim_weight_decay']},
                     model_name=common_params['model_name'],
                     exp_name=train_params['exp_name'],
                     labels=data_params['labels'],
