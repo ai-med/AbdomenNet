@@ -15,6 +15,17 @@ import nibabel as nb
 import numpy as np
 # from create_datasets.commons import MRIDataset
 import torch.utils.data as data
+# import torchvision.transforms as transforms
+from PIL import Image
+
+# cudnn.deterministic = True
+# cudnn.benchmark = False
+
+torch.manual_seed(0)
+# torch.set_deterministic(True)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+np.random.seed(0)
 
 torch.set_default_tensor_type('torch.FloatTensor')
 
@@ -45,31 +56,31 @@ def estimate_weights_per_slice(labels, no_of_class=9):
 
     return np.array(weights_per_slice)
 
-
+# transform = transforms.Compose([
+#      transforms.ToPILImage(),
+#      transforms.RandomRotation(degrees=(-10, 10)),
+#      transforms.ToTensor(),
+#     #  transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+#      ])
 class MRIDataset(data.Dataset):
 
-    def __init__(self, X_files, y_files, cw_files, w_files, transforms=None):
+    def __init__(self, X_files, y_files, transforms=None):
         self.X_files = X_files
         self.y_files = y_files
-        self.cw_files = cw_files
-        self.w_files = w_files
         self.transforms = transforms
 
         img_array = list()
         label_array = list()
         cw_array = list()
         w_array = list()
-        for vol_f, label_f, cw_f, w_f in zip(self.X_files, self.y_files, self.cw_files, self.w_files):
+        for vol_f, label_f in zip(self.X_files, self.y_files):
             img, label = nb.load(vol_f), nb.load(label_f)
             img_data = np.array(img.get_fdata())
             label_data = np.array(label.get_fdata())
-            # cw = np.load(cw_f)
-            # w = np.load(w_f)
 
             # Transforming to Axial Manually.
             img_data = np.rollaxis(img_data, 2, 0)
             label_data = np.rollaxis(label_data, 2, 0)
-            # cw = np.rollaxis(cw, 2, 0)
 
             cw, _ = estimate_weights_mfb(label_data)
             w = estimate_weights_per_slice(label_data)
@@ -87,7 +98,16 @@ class MRIDataset(data.Dataset):
         class_weights = np.stack(cw_array, axis=0) if len(cw_array) > 1 else cw_array[0]
         weights = np.array(w_array)  # np.stack(w_array, axis=0) if len(w_array) > 1 else w_array[0]
 
+        if self.transforms is not None:
+            self.X = X #if len(X.shape) == 4 else X[:, np.newaxis, :, :]
+            for idx, img in enumerate(self.X):
+                img = np.asarray(img).astype(np.uint8)
+                img = self.transforms(img)
+                self.X[idx] = img
+                
         self.X = X if len(X.shape) == 4 else X[:, np.newaxis, :, :]
+
+    
         self.y = y
         self.cw = class_weights
         self.w = weights
@@ -96,9 +116,10 @@ class MRIDataset(data.Dataset):
     def __getitem__(self, index):
         img = torch.from_numpy(self.X[index])
         label = torch.from_numpy(self.y[index])
+        
         class_weights = torch.from_numpy(self.cw[index])
         weights = torch.from_numpy(self.w[index])
-        return img, label, class_weights, weights
+        return img.type(torch.FloatTensor), label.type(torch.LongTensor), class_weights.type(torch.FloatTensor), weights.type(torch.FloatTensor)
 
     def __len__(self):
         return len(self.y)
@@ -126,20 +147,20 @@ def train(train_params, common_params, data_params, net_params):
     #                                          num_workers=4, pin_memory=True)
 
     train_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume_intensity/**.nii.gz"))
-    train_labels = sorted(glob.glob(f"{data_params['data_dir']}/train/label/**.nii.gz"))
-    train_class_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_class_weights/**.npy"))
-    train_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_weights/**.npy"))
+    train_labels = sorted(glob.glob(f"/mnt/nas/Abhijit/Jyotirmay/abdominal_segmentation/dataset2/ALL/train/label/**.nii.gz"))
+    # train_class_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_class_weights/**.npy"))
+    # train_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_weights/**.npy"))
 
     test_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume_intensity/**.nii.gz"))
-    test_labels = sorted(glob.glob(f"{data_params['data_dir']}/test/label/**.nii.gz"))
-    test_class_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_class_weights/**.npy"))
-    test_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_weights/**.npy"))
+    test_labels = sorted(glob.glob(f"/mnt/nas/Abhijit/Jyotirmay/abdominal_segmentation/dataset2/ALL/test/label/**.nii.gz"))
+    # test_class_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_class_weights/**.npy"))
+    # test_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_weights/**.npy"))
 
-    ds_train = MRIDataset(train_volumes, train_labels, train_class_weights, train_weights)
+    ds_train = MRIDataset(train_volumes, train_labels)
     train_loader = torch.utils.data.DataLoader(ds_train, batch_size=train_params['train_batch_size'], shuffle=True,
                                                num_workers=4, pin_memory=True)
 
-    ds_test = MRIDataset(test_volumes, test_labels, test_class_weights, test_weights)
+    ds_test = MRIDataset(test_volumes, test_labels)
     val_loader = torch.utils.data.DataLoader(ds_test, batch_size=train_params['train_batch_size'], shuffle=False,
                                              num_workers=4, pin_memory=True)
 
@@ -162,10 +183,7 @@ def train(train_params, common_params, data_params, net_params):
     solver = Solver(model,
                     device=common_params['device'],
                     num_class=net_params['num_class'],
-                    optim_args={"lr": train_params['learning_rate'],
-                                   "betas": train_params['optim_betas'],
-                                   "eps": train_params['optim_eps'],
-                                   "weight_decay": train_params['optim_weight_decay']},
+                    optim_args={"lr": train_params['learning_rate']},
                     model_name=common_params['model_name'],
                     exp_name=train_params['exp_name'],
                     labels=data_params['labels'],

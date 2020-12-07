@@ -256,7 +256,7 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
         print('Mean dice score: ', avg_dice_score)
         print('Mean dice score without background: ', avg_dice_score_wo_bg)
         print('all dice scores: ', dice_score_arr)
-        print('class wise mean dice scores: ', np.mean(dice_score_arr, axis=0))
+        print('class wise mean dice scores: ', np.mean(dice_score_arr, axis=0)) #",".join(map(str, list(np.mean(dice_score_arr, axis=0)))))
         class_dist = [dice_score_arr[:, c] for c in range(num_classes)]
 
         if logWriter:

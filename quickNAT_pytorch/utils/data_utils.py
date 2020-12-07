@@ -5,7 +5,7 @@ import nibabel as nb
 import numpy as np
 import torch
 import torch.utils.data as data
-from torchvision import transforms
+# from torchvision import transforms
 import utils.preprocessor as preprocessor
 #import preprocessor
 # transform_train = transforms.Compose([
@@ -469,6 +469,10 @@ def load_file_paths(data_dir, label_dir, data_id, volumes_txt_file=None):
             [os.path.join(data_dir, f'{vol}.nii.gz'), os.path.join(label_dir, f'{vol}.nii.gz')]
             for
             vol in volumes_to_use]
+        # file_paths = [[os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
+        #     os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+        #     for
+        #     vol in volumes_to_use]
     elif data_id == 'NAKO':
         file_paths = [
             [os.path.join(data_dir, f'{vol}.nii.gz'), os.path.join(label_dir, f'{vol}.nii.gz')]

@@ -1,5 +1,5 @@
 
-dset = 'NAKO'
+dset = 'UKB'
 DATASET = dset.upper()
 dataset = dset.lower()
 DEFAULT_FILE_TYPE = 'nifti'
@@ -10,7 +10,7 @@ DEFAULT_VIEW = ['Saggital', 'Coronal', 'Axial']
 DEFAULT_REFERENCE_VIEW = 'Sagittal'
 OPTIMIZATION = 'N4'  # Intensity, Min-Max, Fat-Water-Swap
 IS_CROPPING = True
-DEFAULT_OUTPUT_PATH = 'temp2'
+DEFAULT_OUTPUT_PATH = '/mnt/nas/Abhijit/Jyotirmay/abdominal_segmentation/temp'
 DEFAULT_LINSPACE = 30
 
 
@@ -19,8 +19,9 @@ FILE_TO_LABEL_MAP =  {'BACKGROUND': ['background'],
                       'SPLEEN': ['spleen', 'spl'],
                       'KIDNEY(RIGHT)':['kidney_r', 'kidney (right)', 'kidney (right).nrrd', 'kidney (rechts)'],
                       'KIDNEY(LEFT)':['kidney_l', 'kidney (left)', 'kidney (left).nrrd', 'kidney (links)'], 
-                      'ADRENAL(RIGHT)':['adremalgland(right)', 'adrenalgland(right)','adrenalgalnd(right)'], 
-                      'ADRENAL(LEFT)': ['adremalgland(left)', 'adrenalgland(left)', 'adrenalgalnd(left)', 'adrenalgland(links)'],
+                      'ADRENAL': ['adrenal', 'adremal', 'adremalgland(right)', 'adrenalgland(right)','adrenalgalnd(right)', 'adremalgland(left)', 'adrenalgland(left)', 'adrenalgalnd(left)', 'adrenalgland(links)'],
+#                       'ADRENAL(RIGHT)':['adremalgland(right)', 'adrenalgland(right)','adrenalgalnd(right)'], 
+#                       'ADRENAL(LEFT)': ['adremalgland(left)', 'adrenalgland(left)', 'adrenalgalnd(left)', 'adrenalgland(links)'],
                       'PANCREAS': ['pancreas'],
                       'GALLBLADDER': ['gallbladder', 'Gallblader']}
 
@@ -29,7 +30,7 @@ HIST_MATCHING_VOL_PATH = '/mnt/nas/Data_WholeBody/NAKO/NAKO_200/MRI/100129/10012
 
 # 'SUBCUTANEOUS':['subcutaneous', 'subcutan'], 'THYROIDGLAND':['thyroid']
 
-volume_txt_file = f'datasets/{dataset}/volumes.txt'
+volume_txt_file = f'datasets/{dataset}/larger_vols.txt' #volumes.txt'
 if DATASET == 'KORA':
     data_dir = "/mnt/nas/Data_WholeBody/KORA/KORA_all/KORA_Nifti"
 elif DATASET == 'NAKO':
@@ -41,10 +42,10 @@ else:
 
 label_dir = f'datasets/lablmaps/{DATASET}'
 
-n4_corrected_data_dir = f"temp2/{DATASET}/n4_corrected_2"
+n4_corrected_data_dir = f"{DEFAULT_OUTPUT_PATH}/{DATASET}/n4_corrected_2"
 
-processed_path = f'temp2/{DATASET}/'
-processed_dir = f'temp2/{DATASET}/processed'
+processed_path = f'{DEFAULT_OUTPUT_PATH}/{DATASET}/'
+processed_dir = f'{DEFAULT_OUTPUT_PATH}/{DATASET}/processed'
 
 one_time_n4_optimization = True
 vol_to_check_list = None

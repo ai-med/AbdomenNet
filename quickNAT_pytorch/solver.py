@@ -9,6 +9,8 @@ from torch.optim import lr_scheduler
 import utils.common_utils as common_utils
 from utils.log_utils import LogWriter
 
+# import wandb
+
 CHECKPOINT_DIR = 'checkpoints'
 CHECKPOINT_EXTENSION = 'pth.tar'
 
@@ -20,7 +22,7 @@ class Solver(object):
                  exp_name,
                  device,
                  num_class,
-                 optim=torch.optim.Adam,
+                 optim=torch.optim.SGD,
                  optim_args={},
                  loss_func=additional_losses.CombinedLoss(),
                  model_name='quicknat',
@@ -35,7 +37,7 @@ class Solver(object):
 
         self.device = device
         self.model = model
-
+        self.swa_model = torch.optim.swa_utils.AveragedModel(self.model)
         self.model_name = model_name
         self.labels = labels
         self.num_epochs = num_epochs
@@ -44,8 +46,12 @@ class Solver(object):
         else:
             self.loss_func = loss_func
         self.optim = optim(model.parameters(), **optim_args)
-        self.scheduler = lr_scheduler.StepLR(self.optim, step_size=lr_scheduler_step_size,
-                                             gamma=lr_scheduler_gamma)
+        # self.scheduler = lr_scheduler.StepLR(self.optim, step_size=lr_scheduler_step_size,
+        #                                      gamma=lr_scheduler_gamma)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optim, T_max=300)
+        self.swa_start = -1 #int(np.round(self.num_epochs*0.75))
+        print(self.swa_start)
+        self.swa_scheduler = torch.optim.swa_utils.SWALR(self.optim, swa_lr=0.05)
 
         exp_dir_path = os.path.join(exp_dir, exp_name)
         common_utils.create_if_not(exp_dir_path)
@@ -76,6 +82,7 @@ class Solver(object):
         - val_loader: val data in torch.utils.data.DataLoader
         """
         model, optim, scheduler = self.model, self.optim, self.scheduler
+        swa_model, swa_scheduler, swa_start = self.swa_model, self.swa_scheduler, self.swa_start
         dataloaders = {
             'train': train_loader,
             'val': val_loader
@@ -97,7 +104,7 @@ class Solver(object):
                 y_list = []
                 if phase == 'train':
                     model.train()
-                    scheduler.step(epoch)
+                    # scheduler.step(epoch)
                 else:
                     model.eval()
                 for i_batch, sample_batched in enumerate(dataloaders[phase]):
@@ -126,12 +133,18 @@ class Solver(object):
                     #print('max target ', torch.max(y))
                     #print('min output ', torch.min(output))
                     #print('max output ', torch.max(output))
-                    loss = self.loss_func(output, y, wd)
+                    loss = self.loss_func(output, y, wd, None)
+                    # wandb.log({"loss": loss})
                     if phase == 'train':
                         optim.zero_grad()
                         loss.backward()
                         optim.step()
-                        #scheduler.step()
+                        #scheduler.step(epoch)
+                        if epoch > swa_start:
+                          swa_model.update_parameters(model)
+                          swa_scheduler.step()
+                        else:
+                          scheduler.step()
                         if i_batch % self.log_nth == 0:
                             self.logWriter.loss_per_iter(loss.item(), i_batch, current_iteration)
                         current_iteration += 1
@@ -150,6 +163,7 @@ class Solver(object):
                             print("#", end='', flush=True)
                         else:
                             print("100%", flush=True)
+
 
                 with torch.no_grad():
                     out_arr, y_arr = torch.cat(out_list), torch.cat(y_list)
@@ -176,6 +190,8 @@ class Solver(object):
             }, os.path.join(self.exp_dir_path, CHECKPOINT_DIR,
                             'checkpoint_epoch_' + str(epoch) + '.' + CHECKPOINT_EXTENSION)) 
 
+        torch.optim.swa_utils.update_bn(dataloaders['train'], swa_model)
+        self.model = swa_model
         print('FINISH.')
         self.logWriter.close()
 
