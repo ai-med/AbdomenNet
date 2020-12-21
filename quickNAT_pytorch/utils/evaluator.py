@@ -1,5 +1,6 @@
 import os
-from quicknat import QuickNat
+# from quicknat import QuickNat
+from quick_oct import QuickOct
 import nibabel as nib
 import nibabel as nb
 import numpy as np

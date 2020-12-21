@@ -1,13 +1,18 @@
 import argparse
 import os
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 import torch
 from utils.evaluator import evaluate, evaluate2view, evaluate_dice_score, compute_vol_bulk, evaluate3view
-from quicknat import QuickNat
+# from quicknat import QuickNat
+from quick_oct import QuickOct
 from fastSurferCNN import FastSurferCNN
 from settings import Settings
 from solver import Solver
 from utils.data_utils import get_imdb_dataset, get_imdb_dataset_3channel, get_imdb_dataset_2channel
 from utils.log_utils import LogWriter
+from utils.transform import transforms
 import logging
 import shutil
 import glob
@@ -56,12 +61,10 @@ def estimate_weights_per_slice(labels, no_of_class=9):
 
     return np.array(weights_per_slice)
 
-# transform = transforms.Compose([
-#      transforms.ToPILImage(),
-#      transforms.RandomRotation(degrees=(-10, 10)),
-#      transforms.ToTensor(),
-#     #  transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-#      ])
+
+transform = transforms(rotate_prob=0.5, deform_prob=0.5, denoise_prob=0.5)
+
+
 class MRIDataset(data.Dataset):
 
     def __init__(self, X_files, y_files, transforms=None):
@@ -81,7 +84,9 @@ class MRIDataset(data.Dataset):
             # Transforming to Axial Manually.
             img_data = np.rollaxis(img_data, 2, 0)
             label_data = np.rollaxis(label_data, 2, 0)
-
+            img_data = np.pad(img_data, ((0,0),(0,0),(8,8)), 'constant', constant_values=0)
+            label_data = np.pad(label_data, ((0,0),(0,0),(8,8)), 'constant', constant_values=0)
+            
             cw, _ = estimate_weights_mfb(label_data)
             w = estimate_weights_per_slice(label_data)
 
@@ -97,29 +102,42 @@ class MRIDataset(data.Dataset):
         y = np.stack(label_array, axis=0) if len(label_array) > 1 else label_array[0]
         class_weights = np.stack(cw_array, axis=0) if len(cw_array) > 1 else cw_array[0]
         weights = np.array(w_array)  # np.stack(w_array, axis=0) if len(w_array) > 1 else w_array[0]
-
-        if self.transforms is not None:
-            self.X = X #if len(X.shape) == 4 else X[:, np.newaxis, :, :]
-            for idx, img in enumerate(self.X):
-                img = np.asarray(img).astype(np.uint8)
-                img = self.transforms(img)
-                self.X[idx] = img
-                
-        self.X = X if len(X.shape) == 4 else X[:, np.newaxis, :, :]
-
-    
         self.y = y
+        # if self.transforms is not None:
+        #     self.X = X #if len(X.shape) == 4 else X[:, np.newaxis, :, :]
+        #     self.y = y
+            # for idx, sample in enumerate(zip(self.X, self.y)):
+            #     # img = np.asarray(img).astype(np.uint8)
+            #     sample = self.transforms(sample)
+            #     img, mask = sample
+            #     self.X[idx] = img
+            #     self.y[idx] = mask
+                
+        self.X = X #if len(X.shape) == 4 else X[:, np.newaxis, :, :]
+
         self.cw = class_weights
         self.w = weights
         print(self.X.shape, self.y.shape, self.cw.shape, self.w.shape)
 
     def __getitem__(self, index):
-        img = torch.from_numpy(self.X[index])
-        label = torch.from_numpy(self.y[index])
-        
+        img = self.X[index]
+        label = self.y[index]
+
+        if self.transforms is not None:
+            img, label = self.transforms((img, label))
+
+        img = img if len(img.shape) == 3 else img[np.newaxis, :, :]
+        img = torch.from_numpy(img)
+        label = torch.from_numpy(label)
         class_weights = torch.from_numpy(self.cw[index])
         weights = torch.from_numpy(self.w[index])
         return img.type(torch.FloatTensor), label.type(torch.LongTensor), class_weights.type(torch.FloatTensor), weights.type(torch.FloatTensor)
+
+    def getItem(self, index):
+        imgs = self.X[index]
+        labels = self.y[index]
+        imgs = imgs if len(imgs.shape) == 4 else imgs[:, np.newaxis, :, :]
+        return imgs, labels
 
     def __len__(self):
         return len(self.y)
@@ -139,24 +157,14 @@ def load_data(data_params):
 
 
 def train(train_params, common_params, data_params, net_params):
-    # train_data, test_data = load_data(data_params)
-    #
-    # train_loader = torch.utils.data.DataLoader(train_data, batch_size=train_params['train_batch_size'], shuffle=True,
-    #                                            num_workers=4, pin_memory=True)
-    # val_loader = torch.utils.data.DataLoader(test_data, batch_size=train_params['val_batch_size'], shuffle=False,
-    #                                          num_workers=4, pin_memory=True)
 
-    train_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume_intensity/**.nii.gz"))
-    train_labels = sorted(glob.glob(f"/mnt/nas/Abhijit/Jyotirmay/abdominal_segmentation/dataset2/ALL/train/label/**.nii.gz"))
-    # train_class_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_class_weights/**.npy"))
-    # train_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_weights/**.npy"))
+    train_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume/**.nii.gz"))
+    train_labels = sorted(glob.glob(f"{data_params['data_dir']}/train/label9/**.nii.gz"))
 
-    test_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume_intensity/**.nii.gz"))
-    test_labels = sorted(glob.glob(f"/mnt/nas/Abhijit/Jyotirmay/abdominal_segmentation/dataset2/ALL/test/label/**.nii.gz"))
-    # test_class_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_class_weights/**.npy"))
-    # test_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_weights/**.npy"))
+    test_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume/**.nii.gz"))
+    test_labels = sorted(glob.glob(f"{data_params['data_dir']}/test/label9/**.nii.gz"))
 
-    ds_train = MRIDataset(train_volumes, train_labels)
+    ds_train = MRIDataset(train_volumes, train_labels, transform)
     train_loader = torch.utils.data.DataLoader(ds_train, batch_size=train_params['train_batch_size'], shuffle=True,
                                                num_workers=4, pin_memory=True)
 
@@ -168,7 +176,7 @@ def train(train_params, common_params, data_params, net_params):
         model = torch.load(train_params['pre_trained_path'])
     else:
         if net_params['type'] == 'quicknat':
-            model = QuickNat(net_params)
+            model = QuickOct(net_params)
         elif net_params['type'] == 'fastsurfer':
             model = FastSurferCNN(net_params)
 
@@ -198,6 +206,7 @@ def train(train_params, common_params, data_params, net_params):
     solver.train(train_loader, val_loader)
     final_model_path = os.path.join(common_params['save_model_dir'], train_params['final_model_file'])
     model.save(final_model_path)
+    solver.save_best_model('solver_'+final_model_path)
     print("final model saved @ " + str(final_model_path))
 
 
