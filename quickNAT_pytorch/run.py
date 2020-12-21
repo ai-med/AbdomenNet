@@ -1,13 +1,18 @@
 import argparse
 import os
+
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
+
 import torch
 from utils.evaluator import evaluate, evaluate2view, evaluate_dice_score, compute_vol_bulk, evaluate3view
-from quicknat import QuickNat
-from fastSurferCNN import FastSurferCNN
+# from quicknat import QuickNat
+from quick_oct import QuickOct
+# from fastSurferCNN import FastSurferCNN
 from settings import Settings
 from solver import Solver
 from utils.data_utils import get_imdb_dataset, get_imdb_dataset_3channel, get_imdb_dataset_2channel
 from utils.log_utils import LogWriter
+from utils.transform import transforms
 import logging
 import shutil
 import glob
@@ -15,6 +20,17 @@ import nibabel as nb
 import numpy as np
 # from create_datasets.commons import MRIDataset
 import torch.utils.data as data
+# import torchvision.transforms as transforms
+from PIL import Image
+
+# cudnn.deterministic = True
+# cudnn.benchmark = False
+
+torch.manual_seed(0)
+# torch.set_deterministic(True)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+np.random.seed(0)
 
 torch.set_default_tensor_type('torch.FloatTensor')
 
@@ -45,31 +61,29 @@ def estimate_weights_per_slice(labels, no_of_class=9):
 
     return np.array(weights_per_slice)
 
+transform = transforms(rotate_prob=0.5, deform_prob=0.5, denoise_prob=0.5)
 
 class MRIDataset(data.Dataset):
 
-    def __init__(self, X_files, y_files, cw_files, w_files, transforms=None):
+    def __init__(self, X_files, y_files, transforms=None, thickSlice=None):
         self.X_files = X_files
         self.y_files = y_files
-        self.cw_files = cw_files
-        self.w_files = w_files
         self.transforms = transforms
+        self.thickSlice = thickSlice
 
         img_array = list()
         label_array = list()
         cw_array = list()
         w_array = list()
-        for vol_f, label_f, cw_f, w_f in zip(self.X_files, self.y_files, self.cw_files, self.w_files):
+
+        for vol_f, label_f in zip(self.X_files, self.y_files):
             img, label = nb.load(vol_f), nb.load(label_f)
             img_data = np.array(img.get_fdata())
             label_data = np.array(label.get_fdata())
-            # cw = np.load(cw_f)
-            # w = np.load(w_f)
 
             # Transforming to Axial Manually.
             img_data = np.rollaxis(img_data, 2, 0)
             label_data = np.rollaxis(label_data, 2, 0)
-            # cw = np.rollaxis(cw, 2, 0)
 
             cw, _ = estimate_weights_mfb(label_data)
             w = estimate_weights_per_slice(label_data)
@@ -85,20 +99,73 @@ class MRIDataset(data.Dataset):
         X = np.stack(img_array, axis=0) if len(img_array) > 1 else img_array[0]
         y = np.stack(label_array, axis=0) if len(label_array) > 1 else label_array[0]
         class_weights = np.stack(cw_array, axis=0) if len(cw_array) > 1 else cw_array[0]
-        weights = np.array(w_array)  # np.stack(w_array, axis=0) if len(w_array) > 1 else w_array[0]
-
-        self.X = X if len(X.shape) == 4 else X[:, np.newaxis, :, :]
-        self.y = y
+        weights = np.array(w_array)
+        self.y = y   
+        self.X = X 
         self.cw = class_weights
         self.w = weights
+
         print(self.X.shape, self.y.shape, self.cw.shape, self.w.shape)
 
     def __getitem__(self, index):
-        img = torch.from_numpy(self.X[index])
-        label = torch.from_numpy(self.y[index])
+        img = self.X[index]
+        label = self.y[index]
+        
+        # print('image shape',img.shape)
+        if self.transforms is not None:
+            # orig_shape = img.shape
+            # img = img.reshape((-1, img.shape[-1]))
+            # print("voming")
+            img, label = self.transforms((img, label))
+            # img = img.reshape(orig_shape)
+
+        if self.thickSlice is not None:
+            img = self.thickenTheSlice(index, img)
+
+        # print('transformed image shape',img.shape)
+        img = img if len(img.shape) == 3 else img[np.newaxis, :, :]
+        img = torch.from_numpy(img)
+        label = torch.from_numpy(label)
         class_weights = torch.from_numpy(self.cw[index])
         weights = torch.from_numpy(self.w[index])
-        return img, label, class_weights, weights
+        return img.type(torch.FloatTensor), label.type(torch.LongTensor), class_weights.type(torch.FloatTensor), weights.type(torch.FloatTensor)
+
+    def thickenSlices(self, indices):
+        thickenImages = []
+        for i in indices:
+            thickenImages.append(self.thickenTheSlice(i))
+        
+        return np.array(thickenImages) # np.stack(thickenImages, axis=0)
+
+    def thickenTheSlice(self, index, img=None):
+        img = img if img is not None else self.X[index] 
+        if index < 2:
+                n1, n2 = index, index
+        else:
+            n1, n2 = index-1, index-2
+        
+        if index >= self.X.shape[0]-3:
+            p1, p2 = index, index
+        else:
+            p1, p2 = index+1, index+2
+
+        img_n1 = self.X[n1]
+        img_n2 = self.X[n2]
+        img_p1 = self.X[p1]
+        img_p2 = self.X[p2]
+        img_ts = [img_n2, img_n1, img, img_p1, img_p2]
+        thickenImg = np.stack(img_ts, axis=0)
+        return thickenImg
+
+    def getItem(self, index):
+        if self.thickSlice:
+            imgs = self.thickenSlices(index)
+        else:
+            imgs = self.X[index]
+
+        labels = self.y[index]
+        imgs = imgs if len(imgs.shape) == 4 else imgs[:, np.newaxis, :, :]
+        return imgs, labels
 
     def __len__(self):
         return len(self.y)
@@ -126,20 +193,16 @@ def train(train_params, common_params, data_params, net_params):
     #                                          num_workers=4, pin_memory=True)
 
     train_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume/**.nii.gz"))
-    train_labels = sorted(glob.glob(f"{data_params['data_dir']}/train/label/**.nii.gz"))
-    train_class_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_class_weights/**.npy"))
-    train_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_weights/**.npy"))
+    train_labels = sorted(glob.glob(f"{data_params['data_dir']}/train/label9/**.nii.gz"))
 
     test_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume/**.nii.gz"))
-    test_labels = sorted(glob.glob(f"{data_params['data_dir']}/test/label/**.nii.gz"))
-    test_class_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_class_weights/**.npy"))
-    test_weights = sorted(glob.glob(f"{data_params['data_dir']}/train/label_weights/**.npy"))
+    test_labels = sorted(glob.glob(f"{data_params['data_dir']}/test/label9/**.nii.gz"))
 
-    ds_train = MRIDataset(train_volumes, train_labels, train_class_weights, train_weights)
+    ds_train = MRIDataset(train_volumes, train_labels, transforms=None, thickSlice=net_params['num_channels'])
     train_loader = torch.utils.data.DataLoader(ds_train, batch_size=train_params['train_batch_size'], shuffle=True,
                                                num_workers=4, pin_memory=True)
 
-    ds_test = MRIDataset(test_volumes, test_labels, test_class_weights, test_weights)
+    ds_test = MRIDataset(test_volumes, test_labels, transforms=None, thickSlice=net_params['num_channels'])
     val_loader = torch.utils.data.DataLoader(ds_test, batch_size=train_params['train_batch_size'], shuffle=False,
                                              num_workers=4, pin_memory=True)
 
@@ -147,18 +210,22 @@ def train(train_params, common_params, data_params, net_params):
         model = torch.load(train_params['pre_trained_path'])
     else:
         if net_params['type'] == 'quicknat':
-            model = QuickNat(net_params)
-        elif net_params['type'] == 'fastsurfer':
-            model = FastSurferCNN(net_params)
+            model = QuickOct(net_params)
+        # elif net_params['type'] == 'fastsurfer':
+        #     model = FastSurferCNN(net_params)
 
-    # {"lr": train_params['learning_rate'],
-     # "momentum": train_params['momentum'],
-     # "weight_decay": train_params['optim_weight_decay']},
+       # {"lr": train_params['learning_rate'],
+    #   "momentum": train_params['momentum'],
+    #   "weight_decay": train_params['optim_weight_decay']},
+# {"lr": train_params['learning_rate'],
+#                                    "betas": train_params['optim_betas'],
+#                                    "eps": train_params['optim_eps'],
+#                                    "weight_decay": train_params['optim_weight_decay']},
+
     solver = Solver(model,
                     device=common_params['device'],
                     num_class=net_params['num_class'],
-                    optim_args={"lr": train_params['learning_rate'],
-                                "weight_decay": train_params['optim_weight_decay']},
+                    optim_args={"lr": train_params['learning_rate']},
                     model_name=common_params['model_name'],
                     exp_name=train_params['exp_name'],
                     labels=data_params['labels'],
@@ -319,7 +386,7 @@ if __name__ == '__main__':
     parser.add_argument('--setting_path', '-sp', required=False, help='optional path to settings_eval_nako.ini')
     args = parser.parse_args()
 
-    settings = Settings('/home/abhijit/Jyotirmay/abdominal_segmentation/quickNAT_pytorch/settings_merged_jj.ini')
+    settings = Settings('/home/jyotirmay/remote_projects/abdominal_segmentation_2/quickNAT_pytorch/settings_merged_jj.ini')
     common_params, data_params, net_params, train_params, eval_params = settings['COMMON'], settings['DATA'], \
                                                                         settings[
                                                                             'NETWORK'], settings['TRAINING'], \

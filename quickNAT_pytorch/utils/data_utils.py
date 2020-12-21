@@ -16,18 +16,32 @@ import utils.preprocessor as preprocessor
 
 class ImdbData(data.Dataset):
     def __init__(self, X, y, w, wd, transforms=None):
+        # print(X.shape, y.shape, wd.shape, w.shape)
         self.X = X if len(X.shape) == 4 else X[:, np.newaxis, :, :]
         self.y = y
         self.w = w
         self.wd = wd
         self.transforms = transforms
+        print(self.X.shape, self.y.shape, self.wd.shape, self.w.shape)
 
     def __getitem__(self, index):
+        # print(index, len(self.y))
+        # try:
         img = torch.from_numpy(self.X[index])
         label = torch.from_numpy(self.y[index])
-        weight = torch.from_numpy(self.w[index])
+        weight = torch.from_numpy(self.wd[index])
         dice_weight = torch.from_numpy(self.wd[index])
-        return img, label, weight, dice_weight
+        return img.type(torch.FloatTensor), label.type(torch.LongTensor), dice_weight.type(torch.FloatTensor), weight.type(torch.FloatTensor)
+        # except Exception as e:
+        #     print(e)
+        #     index = np.random.choice(len(self.y), 10, replace=False)
+        #     print(index, len(self.y))
+        #     img = torch.from_numpy(self.X[index])
+        #     label = torch.from_numpy(self.y[index])
+        #     weight = torch.from_numpy(self.wd[index])
+        #     dice_weight = torch.from_numpy(self.wd[index])
+        #     return img.type(torch.FloatTensor), label.type(torch.LongTensor), dice_weight.type(torch.FloatTensor), weight.type(torch.FloatTensor)
+            
 
     def __len__(self):
         return len(self.y)
@@ -129,9 +143,12 @@ def get_imdb_dataset(data_params):
     class_weight_test = h5py.File(os.path.join(data_params['data_dir'], data_params['test_class_weights_file']), 'r')
     weight_test = h5py.File(os.path.join(data_params['data_dir'], data_params['test_weights_file']), 'r')
 
-    return (ImdbData(data_train['data'][()], label_train['label'][()], class_weight_train['class_weights'][()], weight_train['weights'][()]),
-            ImdbData(data_test['data'][()], label_test['label'][()], class_weight_test['class_weights'][()], weight_test['weights'][()]))
-
+    ind = [i for i in range(1024) if i != 938]
+    # ind = [935, 936, 937, 939]
+    # s, se = 935,938
+    return (ImdbData(data_train['data'][ind], label_train['label'][ind], weight_train['weights'][ind], class_weight_train['class_weights'][ind]),
+            ImdbData(data_test['data'][:], label_test['label'][:], weight_test['weights'][:], class_weight_test['class_weights'][:]))
+# 1024, 256
 
 def load_dataset_3channel(file_paths,
                  orientation,

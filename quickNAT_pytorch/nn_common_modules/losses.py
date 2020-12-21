@@ -22,6 +22,67 @@ from torch.nn.modules.loss import _Loss, _WeightedLoss
 from torch.autograd import Variable
 
 
+class CalDiceLoss(_WeightedLoss):
+    """
+        Dice Loss for a batch of samples
+        """
+    # @torch.jit.script_method
+    def forward(self, output, target, weights=None, ignore_index=None):
+        """
+        Forward pass
+        :param output: NxCxHxW Variable
+        :param target: NxHxW LongTensor
+        :param weights: C FloatTensor
+        :param ignore_index: int index to ignore from loss
+        :return:
+        """
+        '''
+            TPU = tf.reduce_sum(phi(yPred)*yTrue)
+            TPD = tf.reduce_sum(yTrue)
+            FPD = tf.reduce_sum((1-phi(yPred))*yTrue)
+            FND = tf.reduce_sum((1-phi(-yPred))*(1-yTrue))
+            loss = 1-2*TPU/(2*TPD+FPD+FND)
+            1-2*TPU/(2*TPD+FPD+FND)
+        '''
+        phi = lambda t: 1.0+F.log_softmax(torch.min(t,t/3.0),dim=1)/torch.log(torch.tensor(2.0))
+        eps = 0.0001
+        encoded_target = output.detach() * 0
+        dim = len(output.shape) - 2
+        encoded_target.scatter_(1, target.unsqueeze(1), 1)
+        if weights is None:
+            weights = 1
+        else:
+            batch_dim = weights.size()[0]
+            weights = weights.sum(0) / batch_dim
+        intersection = phi(output) * encoded_target
+        numerator = intersection.sum(0).sum(1).sum(1)
+        if dim == 2:
+            numerator = 2 * numerator
+        elif dim == 3:
+            numerator = 2 * numerator.sum(1)
+        else:
+            raise ValueError('Expected dimension 2 or 3, got dim {}'.format(
+                dim))
+        #denominator = output + encoded_target
+        TPD = encoded_target
+        FPD = (1.0 - phi(output)) * encoded_target
+        FND = (1.0 - phi(-1.0*output)) * (1.0 - encoded_target)
+        denominator = 2*TPD + FPD+FND
+        # if ignore_index is not None:
+        #    denominator[mask] = 0
+        if dim == 2:
+            denominator = denominator.sum(0).sum(1).sum(1) + eps
+        elif dim == 3:
+            denominator = denominator.sum(0).sum(1).sum(1).sum(1) + eps
+        else:
+            raise ValueError('Expected dimension 2 or 3, got dim {}'.format(
+                dim))
+        dice = numerator / denominator
+        #loss_per_channel = weights * (1 - dice)
+        loss_per_channel = 1.0-dice
+        return loss_per_channel.sum() / output.size(1), dice
+
+
 class DiceLoss(_WeightedLoss):
     """
     Dice Loss for a batch of samples
@@ -50,7 +111,8 @@ class DiceLoss(_WeightedLoss):
         num_union_pixels = num_union_pixels.sum(2).sum(2)
         #print(num_union_pixels)
 
-        loss_per_class = 1 - ((2 * intersection) / (num_union_pixels + eps))
+        # loss_per_class = 1 - ((2 * intersection) / (num_union_pixels + eps))
+        loss_per_class = 1 - ((2 * intersection + 1) / (num_union_pixels + 1))
         if weight is None:
             weight = torch.ones_like(loss_per_class)
         loss_per_class *= weight
@@ -68,6 +130,7 @@ class CombinedLoss(_Loss):
 
         self.cross_entropy_loss = nn.CrossEntropyLoss(reduction='none')
         self.dice_loss = DiceLoss()
+        self.cal_dice_loss = CalDiceLoss()
 
     def forward(self, input, target, class_weights=None, dice_weights=None):
         """
@@ -79,6 +142,7 @@ class CombinedLoss(_Loss):
         :return: scalar
         """
         y_2 = self.dice_loss(input, target, dice_weights)
+        # y_2, _ = self.cal_dice_loss(input, target, dice_weights)
         #print('dice loss', y_2)
         if class_weights is None:
             y_1 = torch.mean(self.cross_entropy_loss.forward(input, target))

@@ -2,11 +2,10 @@
 import numpy as np
 import torch
 import torch.nn as nn
-
 from nn_common_modules import modules as sm
 from squeeze_and_excitation import squeeze_and_excitation as se
 
-class QuickNat(nn.Module):
+class QuickOct(nn.Module):
     """
     A PyTorch implementation of QuickNAT
 
@@ -25,19 +24,23 @@ class QuickNat(nn.Module):
                         'se_block': False,
                         'drop_out':0.2}
         """
-        super(QuickNat, self).__init__()
+        super(QuickOct, self).__init__()
         print("NUMBER OF CHANNEL", params['num_channels'])
-        self.encode1 = sm.EncoderBlock(params, se_block_type=se.SELayer(params['se_block']).value)
+        self.encode1 = sm.EncoderBlock(params, se_block_type=params['se_block'])
+
         params['num_channels'] = params['num_filters']
-        self.encode2 = sm.EncoderBlock(params, se_block_type=se.SELayer(params['se_block']).value)
-        self.encode3 = sm.EncoderBlock(params, se_block_type=se.SELayer(params['se_block']).value)
-        self.encode4 = sm.EncoderBlock(params, se_block_type=se.SELayer(params['se_block']).value)
-        self.bottleneck = sm.DenseBlock(params, se_block_type=se.SELayer(params['se_block']).value)
+        self.encode2 = sm.OctaveEncoderBlock(params, se_block_type=params['se_block'])
+        self.encode3 = sm.OctaveEncoderBlock(params, se_block_type=params['se_block'])
+        # self.encode4 = sm.OctaveEncoderBlock(params, se_block_type=params['se_block'])
+        
+        self.bottleneck = sm.OctaveDenseBlock(params, se_block_type=params['se_block'])
         params['num_channels'] = params['num_filters'] * 2
-        self.decode1 = sm.DecoderBlock(params, se_block_type=se.SELayer(params['se_block']).value)
-        self.decode2 = sm.DecoderBlock(params, se_block_type=se.SELayer(params['se_block']).value)
-        self.decode3 = sm.DecoderBlock(params, se_block_type=se.SELayer(params['se_block']).value)
-        self.decode4 = sm.DecoderBlock(params, se_block_type=se.SELayer(params['se_block']).value)
+        self.decode1 = sm.OctaveDecoderBlock(params, se_block_type=params['se_block'], step=True)
+        self.decode2 = sm.OctaveDecoderBlock(params, se_block_type=params['se_block'], step=True)
+
+        self.decode3 = sm.DecoderBlock(params, se_block_type=params['se_block'])
+
+        # self.decode4 = sm.DecoderBlock(params, se_block_type=params['se_block'])
         params['num_channels'] = params['num_filters']
         self.classifier = sm.ClassifierBlock(params)
 
@@ -50,12 +53,12 @@ class QuickNat(nn.Module):
         e1, out1, ind1 = self.encode1.forward(input)
         e2, out2, ind2 = self.encode2.forward(e1)
         e3, out3, ind3 = self.encode3.forward(e2)
-        e4, out4, ind4 = self.encode4.forward(e3)
+        # e4, out4, ind4 = self.encode4.forward(e3)
 
-        bn = self.bottleneck.forward(e4)
+        bn = self.bottleneck.forward(e3)
 
-        d4 = self.decode4.forward(bn, out4, ind4)
-        d3 = self.decode1.forward(d4, out3, ind3)
+        # d4 = self.decode4.forward(bn, out4, ind4)
+        d3 = self.decode1.forward(bn, out3, ind3)
         d2 = self.decode2.forward(d3, out2, ind2)
         d1 = self.decode3.forward(d2, out1, ind1)
         prob = self.classifier.forward(d1)
