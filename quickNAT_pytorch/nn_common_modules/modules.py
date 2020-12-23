@@ -77,9 +77,9 @@ class DenseBlock(nn.Module):
                                kernel_size=(1, 1),
                                padding=(0, 0),
                                stride=params['stride_conv'])
-        self.batchnorm1 = nn.BatchNorm2d(params['num_channels'])
-        self.batchnorm2 = nn.BatchNorm2d(conv1_out_size)
-        self.batchnorm3 = nn.BatchNorm2d(conv2_out_size)
+        self.batchnorm1 = nn.GroupNorm(params['num_channels'],params['num_channels'])
+        self.batchnorm2 = nn.GroupNorm(conv1_out_size,conv1_out_size)
+        self.batchnorm3 = nn.GroupNorm(conv2_out_size,conv2_out_size)
         self.prelu = nn.PReLU()
         if params['drop_out'] > 0:
             self.drop_out_needed = True
@@ -996,21 +996,21 @@ class OctaveDenseBlock(nn.Module):
         alpha_in, alpha_out = 0.5, 0.5
 
         if step:
-            self.batchnorm1 = nn.BatchNorm2d(params['num_channels'])
+            self.batchnorm1 = nn.GroupNorm(4,params['num_channels'])
 
-            self.batchnorm2_h = nn.BatchNorm2d(int(96)) #conv1_out_size * (1 - alpha_out))+1)
-            self.batchnorm2_l = nn.BatchNorm2d(int(96)) #conv1_out_size-1))
+            self.batchnorm2_h = nn.GroupNorm(8,int(96)) #conv1_out_size * (1 - alpha_out))+1)
+            self.batchnorm2_l = nn.GroupNorm(8,int(96)) #conv1_out_size-1))
 
-            self.batchnorm3_h = nn.BatchNorm2d(int(128)) #conv2_out_size * (1 - alpha_out))+1)
-            self.batchnorm3_l = nn.BatchNorm2d(int(128)) #conv2_out_size-1))
+            self.batchnorm3_h = nn.GroupNorm(16,int(128)) #conv2_out_size * (1 - alpha_out))+1)
+            self.batchnorm3_l = nn.GroupNorm(16,int(128)) #conv2_out_size-1))
         else:
-            self.batchnorm1 = nn.BatchNorm2d(params['num_channels'])
+            self.batchnorm1 = nn.GroupNorm(4,params['num_channels'])
 
-            self.batchnorm2_h = nn.BatchNorm2d(int(64)) #conv1_out_size * (1 - alpha_out)
-            self.batchnorm2_l = nn.BatchNorm2d(int(64)) #(conv1_out_size * alpha_out))
+            self.batchnorm2_h = nn.GroupNorm(8,int(64)) #conv1_out_size * (1 - alpha_out)
+            self.batchnorm2_l = nn.GroupNorm(8,int(64)) #(conv1_out_size * alpha_out))
 
-            self.batchnorm3_h = nn.BatchNorm2d(int(96)) #conv2_out_size * (1 - alpha_out)))
-            self.batchnorm3_l = nn.BatchNorm2d(int(96))  #conv2_out_size * alpha_out))
+            self.batchnorm3_h = nn.GroupNorm(16,int(96)) #conv2_out_size * (1 - alpha_out)))
+            self.batchnorm3_l = nn.GroupNorm(16,int(96))  #conv2_out_size * alpha_out))
 
         self.prelu = nn.PReLU()
         self.prelu_h = nn.PReLU()

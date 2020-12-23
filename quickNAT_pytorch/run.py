@@ -6,8 +6,9 @@ os.environ["CUDA_VISIBLE_DEVICES"]="1"
 import torch
 from utils.evaluator import evaluate, evaluate2view, evaluate_dice_score, compute_vol_bulk, evaluate3view
 # from quicknat import QuickNat
-from quick_oct import QuickOct
+from quick_oct import QuickOct as mclass
 # from fastSurferCNN import FastSurferCNN
+import inspect
 from settings import Settings
 from solver import Solver
 from utils.data_utils import get_imdb_dataset, get_imdb_dataset_3channel, get_imdb_dataset_2channel
@@ -61,7 +62,7 @@ def estimate_weights_per_slice(labels, no_of_class=9):
 
     return np.array(weights_per_slice)
 
-transform = transforms(rotate_prob=0.5, deform_prob=0.5, denoise_prob=0.5)
+transform = transforms(rotate_prob=0.5, denoise_prob=0.5)
 
 class MRIDataset(data.Dataset):
 
@@ -111,6 +112,9 @@ class MRIDataset(data.Dataset):
         img = self.X[index]
         label = self.y[index]
         
+        if self.thickSlice is not None:
+            img = self.thickenTheSlice(index, img)
+
         # print('image shape',img.shape)
         if self.transforms is not None:
             # orig_shape = img.shape
@@ -118,9 +122,6 @@ class MRIDataset(data.Dataset):
             # print("voming")
             img, label = self.transforms((img, label))
             # img = img.reshape(orig_shape)
-
-        if self.thickSlice is not None:
-            img = self.thickenTheSlice(index, img)
 
         # print('transformed image shape',img.shape)
         img = img if len(img.shape) == 3 else img[np.newaxis, :, :]
@@ -192,13 +193,15 @@ def train(train_params, common_params, data_params, net_params):
     # val_loader = torch.utils.data.DataLoader(test_data, batch_size=train_params['val_batch_size'], shuffle=False,
     #                                          num_workers=4, pin_memory=True)
 
+    arch_file_path = inspect.getfile(mclass)
+
     train_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume/**.nii.gz"))
     train_labels = sorted(glob.glob(f"{data_params['data_dir']}/train/label9/**.nii.gz"))
 
     test_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume/**.nii.gz"))
     test_labels = sorted(glob.glob(f"{data_params['data_dir']}/test/label9/**.nii.gz"))
 
-    ds_train = MRIDataset(train_volumes, train_labels, transforms=None, thickSlice=net_params['num_channels'])
+    ds_train = MRIDataset(train_volumes, train_labels, transforms=transform, thickSlice=net_params['num_channels'])
     train_loader = torch.utils.data.DataLoader(ds_train, batch_size=train_params['train_batch_size'], shuffle=True,
                                                num_workers=4, pin_memory=True)
 
@@ -209,8 +212,10 @@ def train(train_params, common_params, data_params, net_params):
     if train_params['use_pre_trained']:
         model = torch.load(train_params['pre_trained_path'])
     else:
+        net_params_ = net_params.copy()
         if net_params['type'] == 'quicknat':
-            model = QuickOct(net_params)
+            model = mclass(net_params)
+            empty_model = mclass(net_params_)
         # elif net_params['type'] == 'fastsurfer':
         #     model = FastSurferCNN(net_params)
 
@@ -235,11 +240,14 @@ def train(train_params, common_params, data_params, net_params):
                     lr_scheduler_gamma=train_params['lr_scheduler_gamma'],
                     use_last_checkpoint=train_params['use_last_checkpoint'],
                     log_dir=common_params['log_dir'],
-                    exp_dir=common_params['exp_dir'])
+                    exp_dir=common_params['exp_dir'],
+                    arch_file_path=arch_file_path)
 
     solver.train(train_loader, val_loader)
     final_model_path = os.path.join(common_params['save_model_dir'], train_params['final_model_file'])
-    model.save(final_model_path)
+    # model.save(final_model_path)
+    solver.model = empty_model
+    solver.save_best_model(final_model_path)
     print("final model saved @ " + str(final_model_path))
 
 
@@ -261,6 +269,7 @@ def evaluate(eval_params, net_params, data_params, common_params, train_params):
     data_id = eval_params['data_id']
     multi_channel = data_params['use_3channel']
     use_2channel = data_params['use_2channel']
+    thick_channel = data_params['thick_channel']
     logWriter = LogWriter(num_classes, log_dir, exp_name, labels=labels)
 
     avg_dice_score, class_dist = evaluate_dice_score(eval_model_path,
@@ -275,7 +284,8 @@ def evaluate(eval_params, net_params, data_params, common_params, train_params):
                                                         device,
                                                         logWriter,
                                                         multi_channel=multi_channel,
-                                                        use_2channel=use_2channel)
+                                                        use_2channel=use_2channel,
+                                                        thick_ch=thick_channel)
     logWriter.close()
 
 

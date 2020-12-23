@@ -1,5 +1,6 @@
 import os
-from quicknat import QuickNat
+# from quicknat import QuickNat
+from quick_oct import QuickOct
 import nibabel as nib
 import nibabel as nb
 import numpy as np
@@ -100,7 +101,7 @@ def compute_structure_uncertainty(mc_pred_list, label_map, ID):
 
 
 def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_txt_file, remap_config, orientation,
-                        prediction_path, data_id, device=0, logWriter=None, mode='eval', multi_channel=False, use_2channel=False):
+                        prediction_path, data_id, device=0, logWriter=None, mode='eval', multi_channel=False, use_2channel=False, thick_ch=False):
     log.info("**Starting evaluation. Please check tensorboard for plots if a logWriter is provided in arguments**")
     batch_size = 16
 
@@ -195,8 +196,29 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
                 elif use_2channel:
                     batch_x, batch_y = torch.cat(
                         (volume[i: i + batch_size], water[i: i + batch_size]), dim=1), labelmap[i:i + batch_size]
+                elif thick_ch:
+                    batch_y = labelmap[i:i + batch_size]
+                    batch_x = []
+                    volume = np.squeeze(volume)
+                    for bs in range(batch_size):
+                        index = i+bs
+                        if index < 2:
+                            n1, n2 = index, index
+                        else:
+                            n1, n2 = index-1, index-2
+                        
+                        if index >= volume.shape[0]-3:
+                            p1, p2 = index, index
+                        else:
+                            p1, p2 = index+1, index+2
+
+                        batch_x.append(np.stack([volume[n2], volume[n1], volume[index], volume[p1], volume[p2]], axis=0))
+                        # print(n2, n1, index, p1, p2)
+                    batch_x = np.array(batch_x)
+                    batch_x = torch.tensor(batch_x).type(torch.FloatTensor)
                 else:
                     batch_x, batch_y = volume[i: i + batch_size], labelmap[i:i + batch_size]
+
                 if cuda_available and (type(device)==int):
                     batch_x = batch_x.cuda(device)
                 out = model(batch_x)

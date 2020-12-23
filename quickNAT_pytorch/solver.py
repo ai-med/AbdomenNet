@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import torch
+import shutil
 from nn_common_modules import losses as additional_losses
 from torch.optim import lr_scheduler
 
@@ -12,6 +13,7 @@ from utils.log_utils import LogWriter
 import wandb
 
 CHECKPOINT_DIR = 'checkpoints'
+ARCHITECTURE_DIR = 'architecture'
 CHECKPOINT_EXTENSION = 'pth.tar'
 
 
@@ -33,7 +35,8 @@ class Solver(object):
                  lr_scheduler_gamma=0.5,
                  use_last_checkpoint=True,
                  exp_dir='experiments',
-                 log_dir='logs'):
+                 log_dir='logs',
+                 arch_file_path=None):
 
         self.device = device
         self.model = model
@@ -58,6 +61,8 @@ class Solver(object):
         common_utils.create_if_not(os.path.join(exp_dir_path, CHECKPOINT_DIR))
         self.exp_dir_path = exp_dir_path
 
+        self.save_architectural_files(arch_file_path)
+        
         self.log_nth = log_nth
         self.logWriter = LogWriter(num_class, log_dir, exp_name, use_last_checkpoint, labels)
         # self.wandb = wandb
@@ -186,6 +191,22 @@ class Solver(object):
         print('FINISH.')
         self.logWriter.close()
 
+    def save_architectural_files(self, arch_file_path):
+        if arch_file_path is not None:
+            destination = os.path.join(self.exp_dir_path, ARCHITECTURE_DIR)
+            common_utils.create_if_not(destination)
+            arch_base = "/".join(arch_file_path.split('/')[:-1])
+            print(arch_base, destination+'/model.py')
+            shutil.copy(arch_file_path, destination+'/model.py')
+            shutil.copy(f'{arch_base}/run.py', f'{destination}/run.py')
+            shutil.copy(f'{arch_base}/solver.py', f'{destination}/solver.py')
+            shutil.copy(f'{arch_base}/utils/evaluator.py', f'{destination}/utils-evaluator.py')
+            shutil.copy(f'{arch_base}/nn_common_modules/losses.py', f'{destination}/nn_common_modules-losses.py')
+            shutil.copy(f'{arch_base}/nn_common_modules/modules.py', f'{destination}/nn_common_modules-modules.py')
+            shutil.copy(f'{arch_base}/settings_merged_jj.ini', f'{destination}/settings_merged_jj.ini')
+        else:
+            print('No Architectural file!!!')
+            
 
     def save_best_model(self, path):
         """
