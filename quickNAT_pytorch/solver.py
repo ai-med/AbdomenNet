@@ -2,6 +2,7 @@ import glob
 import os
 
 import numpy as np
+import shutil
 import torch
 from nn_common_modules import losses as additional_losses
 from torch.optim import lr_scheduler
@@ -12,6 +13,7 @@ from utils.log_utils import LogWriter
 # import wandb
 
 CHECKPOINT_DIR = 'checkpoints'
+ARCHITECTURE_DIR = 'architecture'
 CHECKPOINT_EXTENSION = 'pth.tar'
 
 
@@ -33,7 +35,8 @@ class Solver(object):
                  lr_scheduler_gamma=0.5,
                  use_last_checkpoint=True,
                  exp_dir='experiments',
-                 log_dir='logs'):
+                 log_dir='logs',
+                 arch_file_path=None):
 
         self.device = device
         self.model = model
@@ -57,7 +60,9 @@ class Solver(object):
         common_utils.create_if_not(exp_dir_path)
         common_utils.create_if_not(os.path.join(exp_dir_path, CHECKPOINT_DIR))
         self.exp_dir_path = exp_dir_path
-
+        
+        self.save_architectural_files(arch_file_path)
+        
         self.log_nth = log_nth
         self.logWriter = LogWriter(num_class, log_dir, exp_name, use_last_checkpoint, labels)
 
@@ -71,6 +76,8 @@ class Solver(object):
 
         if use_last_checkpoint:
             self.load_checkpoint()
+
+        print(self.start_epoch, self.start_iteration, self.best_ds_mean, self.best_ds_mean_epoch)
 
     # TODO:Need to correct the CM and dice score calculation.
     def train(self, train_loader, val_loader):
@@ -184,6 +191,8 @@ class Solver(object):
             self.save_checkpoint({
                 'epoch': epoch + 1,
                 'start_iteration': current_iteration + 1,
+                'best_ds_mean': self.best_ds_mean,
+                'best_ds_mean_epoch': self.best_ds_mean_epoch,
                 'arch': self.model_name,
                 'state_dict': model.state_dict(),
                 'optimizer': optim.state_dict(),
@@ -196,6 +205,21 @@ class Solver(object):
         print('FINISH.')
         self.logWriter.close()
 
+    def save_architectural_files(self, arch_file_path):
+        if arch_file_path is not None:
+            destination = os.path.join(self.exp_dir_path, ARCHITECTURE_DIR)
+            common_utils.create_if_not(destination)
+            arch_base = "/".join(arch_file_path.split('/')[:-1])
+            print(arch_base, destination+'/model.py')
+            shutil.copy(arch_file_path, destination+'/model.py')
+            shutil.copy(f'{arch_base}/run.py', f'{destination}/run.py')
+            shutil.copy(f'{arch_base}/solver.py', f'{destination}/solver.py')
+            shutil.copy(f'{arch_base}/utils/evaluator.py', f'{destination}/utils-evaluator.py')
+            shutil.copy(f'{arch_base}/nn_common_modules/losses.py', f'{destination}/nn_common_modules-losses.py')
+            shutil.copy(f'{arch_base}/nn_common_modules/modules.py', f'{destination}/nn_common_modules-modules.py')
+            shutil.copy(f'{arch_base}/settings_merged_jj.ini', f'{destination}/settings_merged_jj.ini')
+        else:
+            print('No Architectural file!!!')
 
     def save_best_model(self, path):
         """
@@ -232,6 +256,8 @@ class Solver(object):
         self.logWriter.log("=> loading checkpoint '{}'".format(file_path))
         checkpoint = torch.load(file_path)
         self.start_epoch = checkpoint['epoch']
+        self.best_ds_mean = checkpoint['best_ds_mean']
+        self.best_ds_mean_epoch = checkpoint['best_ds_mean_epoch']
         self.start_iteration = checkpoint['start_iteration']
         self.model.load_state_dict(checkpoint['state_dict'])
         self.optim.load_state_dict(checkpoint['optimizer'])

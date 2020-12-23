@@ -130,8 +130,8 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
     if type(device) == int:
         # if CUDA available, follow through, else warn and fallback to CPU
         if cuda_available:
-            model = torch.load(model_path)
-            torch.cuda.empty_cache()
+            model = model_path # torch.load(model_path) #model_path #
+            torch.cuda.empty_cache() 
             model.cuda(device)
         else:
             log.warning(
@@ -184,6 +184,9 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
                 if orientation == 'AXI':
                     volume = np.rollaxis(volume, 2, 0)
                     labelmap = np.rollaxis(labelmap, 2, 0)
+                
+                # volume = np.pad(volume, ((0,0),(0,0),(8,8)), 'constant', constant_values=0)
+                # labelmap = np.pad(labelmap, ((0,0),(0,0),(8,8)), 'constant', constant_values=0)
 
             volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
             volume, labelmap = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(labelmap).type(

@@ -31,15 +31,16 @@ class QuickOct(nn.Module):
         params['num_channels'] = params['num_filters']
         self.encode2 = sm.OctaveEncoderBlock(params, se_block_type=params['se_block'])
         self.encode3 = sm.OctaveEncoderBlock(params, se_block_type=params['se_block'])
-        self.encode4 = sm.OctaveEncoderBlock(params, se_block_type=params['se_block'])
+        # self.encode4 = sm.OctaveEncoderBlock(params, se_block_type=params['se_block'])
         
         self.bottleneck = sm.OctaveDenseBlock(params, se_block_type=params['se_block'])
         params['num_channels'] = params['num_filters'] * 2
-        self.decode4 = sm.OctaveDecoderBlock(params, se_block_type=params['se_block'], step=True)
-        self.decode3 = sm.OctaveDecoderBlock(params, se_block_type=params['se_block'], step=True)
+        self.decode1 = sm.OctaveDecoderBlock(params, se_block_type=params['se_block'], step=True)
         self.decode2 = sm.OctaveDecoderBlock(params, se_block_type=params['se_block'], step=True)
 
-        self.decode1 = sm.DecoderBlock(params, se_block_type=params['se_block'])
+        self.decode3 = sm.DecoderBlock(params, se_block_type=params['se_block'])
+
+        # self.decode4 = sm.DecoderBlock(params, se_block_type=params['se_block'])
         params['num_channels'] = params['num_filters']
         self.classifier = sm.ClassifierBlock(params)
 
@@ -52,14 +53,14 @@ class QuickOct(nn.Module):
         e1, out1, ind1 = self.encode1.forward(input)
         e2, out2, ind2 = self.encode2.forward(e1)
         e3, out3, ind3 = self.encode3.forward(e2)
-        e4, out4, ind4 = self.encode4.forward(e3)
+        # e4, out4, ind4 = self.encode4.forward(e3)
 
-        bn = self.bottleneck.forward(e4)
+        bn = self.bottleneck.forward(e3)
 
-        d4 = self.decode4.forward(bn, out4, ind4)
-        d3 = self.decode3.forward(d4, out3, ind3)
+        # d4 = self.decode4.forward(bn, out4, ind4)
+        d3 = self.decode1.forward(bn, out3, ind3)
         d2 = self.decode2.forward(d3, out2, ind2)
-        d1 = self.decode1.forward(d2, out1, ind1)
+        d1 = self.decode3.forward(d2, out1, ind1)
         prob = self.classifier.forward(d1)
 
         return prob

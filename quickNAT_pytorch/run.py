@@ -6,8 +6,9 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import torch
 from utils.evaluator import evaluate, evaluate2view, evaluate_dice_score, compute_vol_bulk, evaluate3view
 # from quicknat import QuickNat
-from quick_oct import QuickOct
-from fastSurferCNN import FastSurferCNN
+from quick_oct import QuickOct as mclass
+# from fastSurferCNN import FastSurferCNN as mclass
+import inspect
 from settings import Settings
 from solver import Solver
 from utils.data_utils import get_imdb_dataset, get_imdb_dataset_3channel, get_imdb_dataset_2channel
@@ -84,8 +85,8 @@ class MRIDataset(data.Dataset):
             # Transforming to Axial Manually.
             img_data = np.rollaxis(img_data, 2, 0)
             label_data = np.rollaxis(label_data, 2, 0)
-            img_data = np.pad(img_data, ((0,0),(0,0),(8,8)), 'constant', constant_values=0)
-            label_data = np.pad(label_data, ((0,0),(0,0),(8,8)), 'constant', constant_values=0)
+            # img_data = np.pad(img_data, ((0,0),(0,0),(8,8)), 'constant', constant_values=0)
+            # label_data = np.pad(label_data, ((0,0),(0,0),(8,8)), 'constant', constant_values=0)
             
             cw, _ = estimate_weights_mfb(label_data)
             w = estimate_weights_per_slice(label_data)
@@ -157,7 +158,8 @@ def load_data(data_params):
 
 
 def train(train_params, common_params, data_params, net_params):
-
+    
+    arch_file_path = inspect.getfile(mclass)
     train_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume/**.nii.gz"))
     train_labels = sorted(glob.glob(f"{data_params['data_dir']}/train/label9/**.nii.gz"))
 
@@ -175,11 +177,14 @@ def train(train_params, common_params, data_params, net_params):
     if train_params['use_pre_trained']:
         model = torch.load(train_params['pre_trained_path'])
     else:
+        net_params_ = net_params.copy()
         if net_params['type'] == 'quicknat':
-            model = QuickOct(net_params)
-        elif net_params['type'] == 'fastsurfer':
-            model = FastSurferCNN(net_params)
-
+            model = mclass(net_params)
+            empty_model = mclass(net_params_)
+        # elif net_params['type'] == 'fastsurfer':
+        #     model = FastSurferCNN(net_params)
+        #     empty_model = FastSurferCNN(net_params)
+    # model = torch.nn.DataParallel(model, device_ids=[0, 1])
        # {"lr": train_params['learning_rate'],
     #   "momentum": train_params['momentum'],
     #   "weight_decay": train_params['optim_weight_decay']},
@@ -201,13 +206,15 @@ def train(train_params, common_params, data_params, net_params):
                     lr_scheduler_gamma=train_params['lr_scheduler_gamma'],
                     use_last_checkpoint=train_params['use_last_checkpoint'],
                     log_dir=common_params['log_dir'],
-                    exp_dir=common_params['exp_dir'])
+                    exp_dir=common_params['exp_dir'],
+                    arch_file_path=arch_file_path)
 
     solver.train(train_loader, val_loader)
-    final_model_path = os.path.join(common_params['save_model_dir'], train_params['final_model_file'])
     model.save(final_model_path)
-    solver.save_best_model('solver_'+final_model_path)
-    print("final model saved @ " + str(final_model_path))
+    solver.model = empty_model
+    best_model_path = os.path.join(common_params['save_model_dir'], train_params['final_model_file'])
+    solver.save_best_model(best_model_path)
+    print("final model saved @ " + str(best_model_path))
 
 
 def evaluate(eval_params, net_params, data_params, common_params, train_params):
