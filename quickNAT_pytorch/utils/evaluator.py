@@ -10,7 +10,7 @@ import torch
 import csv
 import utils.common_utils as common_utils
 import utils.data_utils as du
-from .preprocessor import rotate_orientation
+from .preprocessor import rotate_orientation, remove_black_3channels
 import torch.nn.functional as F
 
 log = logging.getLogger(__name__)
@@ -101,7 +101,7 @@ def compute_structure_uncertainty(mc_pred_list, label_map, ID):
 
 
 def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_txt_file, remap_config, orientation,
-                        prediction_path, data_id, device=0, logWriter=None, mode='eval', multi_channel=False, use_2channel=False):
+                        prediction_path, data_id, device=0, logWriter=None, mode='eval', multi_channel=False, use_2channel=False, thick_ch=False):
     log.info("**Starting evaluation. Please check tensorboard for plots if a logWriter is provided in arguments**")
     batch_size = 16
 
@@ -130,8 +130,8 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
     if type(device) == int:
         # if CUDA available, follow through, else warn and fallback to CPU
         if cuda_available:
-            model = model_path # torch.load(model_path) #model_path #
-            torch.cuda.empty_cache() 
+            model = torch.load(model_path)
+            torch.cuda.empty_cache()
             model.cuda(device)
         else:
             log.warning(
@@ -153,27 +153,63 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
     common_utils.create_if_not(prediction_path)
     volume_dice_score_list = []
     log.info("Evaluating now...")
+    if orientation == 'AXI':
+        to_axis = 2
+    elif orientation == 'COR':
+        to_axis = 1
+    else:
+        to_axis = 0
     with torch.no_grad():
         for vol_idx, file_path in enumerate(file_paths):
             if multi_channel:
-                volume, fat, water, labelmap, class_weights, weights, header = du.load_and_preprocess_3channel(file_path,
-                                                                                          orientation=orientation,
-                                                                                          remap_config=remap_config)
-                volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
-                fat = fat if len(fat.shape) == 4 else fat[:, np.newaxis, :, :]
-                water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
-                volume, fat, water, labelmap = torch.tensor(volume).type(torch.FloatTensor),torch.tensor(fat).type(torch.FloatTensor), torch.tensor(water).type(torch.FloatTensor), torch.tensor(labelmap).type(
-                    torch.LongTensor)
-            elif use_2channel:
-                volume, water, labelmap, class_weights, weights, header = du.load_and_preprocess_2channel(file_path,
-                                                                                          orientation=orientation,
-                                                                                          remap_config=remap_config)
-                volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
+                # volume, fat, water, labelmap, class_weights, weights, header = du.load_and_preprocess_3channel(file_path,
+                #                                                                           orientation=orientation,
+                #                                                                           remap_config=remap_config)
+
+                img, label, water, fat = nb.load(file_path[0]), nb.load(file_path[1]), nb.load(file_path[2]), nb.load(file_path[3])
+                volume, labelmap, water, fat, class_weights, weights, header, affine = img.get_fdata(), label.get_fdata(), water.get_fdata(), fat.get_fdata(), None, None, img.header, img.affine
+
+                volume = np.rollaxis(volume, to_axis, 0)
+                labelmap = np.rollaxis(labelmap, to_axis, 0)
+                water = np.rollaxis(water, to_axis, 0)
+                fat = np.rollaxis(fat, to_axis, 0)
+
+
+                thick_volume = []
+                for w, v, f in zip(water, volume, fat):
+                    thick_volume.append(np.stack([w, v, f], axis=0))
+                volume = thick_volume
+                
+                # volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
                 # fat = fat if len(fat.shape) == 4 else fat[:, np.newaxis, :, :]
-                water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
-                volume, water, labelmap = torch.tensor(volume).type(torch.FloatTensor), \
-                                          torch.tensor(water).type(torch.FloatTensor), \
-                                          torch.tensor(labelmap).type(torch.LongTensor)
+                # water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
+                # volume, fat, water, labelmap = torch.tensor(volume).type(torch.FloatTensor),torch.tensor(fat).type(torch.FloatTensor), torch.tensor(water).type(torch.FloatTensor), torch.tensor(labelmap).type(
+                #     torch.LongTensor)
+                volume, labelmap = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(labelmap).type(torch.LongTensor)
+            elif use_2channel:
+                # volume, water, labelmap, class_weights, weights, header = du.load_and_preprocess_2channel(file_path,
+                #                                                                           orientation=orientation,
+                #                                                                           remap_config=remap_config)
+                img, label, water = nb.load(file_path[0]), nb.load(file_path[1]), nb.load(file_path[2])
+                volume, labelmap, water, class_weights, weights, header, affine = img.get_fdata(), label.get_fdata(), water.get_fdata(), None, None, img.header, img.affine
+                
+
+                 #if len(thick_volume.shape) == 4 else thick_volume[:, np.newaxis, :, :]
+                # fat = fat if len(fat.shape) == 4 else fat[:, np.newaxis, :, :]
+
+                volume = np.rollaxis(volume, to_axis, 0)
+                labelmap = np.rollaxis(labelmap, to_axis, 0)
+                water = np.rollaxis(water, to_axis, 0)
+
+                volume, _, water, labelmap = remove_black_3channels(volume, None, water, labelmap)
+                print(volume.shape, water.shape)
+
+                thick_volume = []
+                for v, w in zip(volume, water):
+                    thick_volume.append(np.stack([w, v], axis=0))
+                volume = thick_volume
+                # water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
+                volume, labelmap = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(labelmap).type(torch.LongTensor)
             else:
                 # volume, labelmap, class_weights, weights, header = du.load_and_preprocess(file_path,
                 #                                                                       orientation=orientation,
@@ -181,26 +217,45 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
                 print(file_path)
                 img, label = nb.load(file_path[0]), nb.load(file_path[1])
                 volume, labelmap, class_weights, weights, header, affine = img.get_fdata(), label.get_fdata(), None, None, img.header, img.affine
-                if orientation == 'AXI':
-                    volume = np.rollaxis(volume, 2, 0)
-                    labelmap = np.rollaxis(labelmap, 2, 0)
-                
-                # volume = np.pad(volume, ((0,0),(0,0),(8,8)), 'constant', constant_values=0)
-                # labelmap = np.pad(labelmap, ((0,0),(0,0),(8,8)), 'constant', constant_values=0)
+                volume = np.rollaxis(volume, to_axis, 0)
+                labelmap = np.rollaxis(labelmap, to_axis, 0)
 
             volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
-            volume, labelmap = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(labelmap).type(
+            volume, labelmap = volume.type(torch.FloatTensor), labelmap.type(
                 torch.LongTensor)
 
             volume_prediction = []
             for i in range(0, len(volume), batch_size):
                 if multi_channel:
-                    batch_x, batch_y = torch.cat((volume[i: i + batch_size],fat[i: i + batch_size],water[i: i + batch_size]),dim=1), labelmap[i:i + batch_size]
+                    batch_x, batch_y = volume[i: i + batch_size], labelmap[i:i + batch_size]
+                    # batch_x, batch_y = torch.cat((volume[i: i + batch_size],fat[i: i + batch_size],water[i: i + batch_size]),dim=1), labelmap[i:i + batch_size]
                 elif use_2channel:
-                    batch_x, batch_y = torch.cat(
-                        (volume[i: i + batch_size], water[i: i + batch_size]), dim=1), labelmap[i:i + batch_size]
+                    batch_x, batch_y = volume[i: i + batch_size], labelmap[i:i + batch_size]
+                    # batch_x, batch_y = torch.cat(
+                    #     (volume[i: i + batch_size], water[i: i + batch_size]), dim=1), labelmap[i:i + batch_size]
+                elif thick_ch:
+                    batch_y = labelmap[i:i + batch_size]
+                    batch_x = []
+                    volume = np.squeeze(volume)
+                    for bs in range(batch_size):
+                        index = i+bs
+                        if index < 2:
+                            n1, n2 = index, index
+                        else:
+                            n1, n2 = index-1, index-2
+                        
+                        if index >= volume.shape[0]-3:
+                            p1, p2 = index, index
+                        else:
+                            p1, p2 = index+1, index+2
+
+                        batch_x.append(np.stack([volume[n2], volume[n1], volume[index], volume[p1], volume[p2]], axis=0))
+                        # print(n2, n1, index, p1, p2)
+                    batch_x = np.array(batch_x)
+                    batch_x = torch.tensor(batch_x).type(torch.FloatTensor)
                 else:
                     batch_x, batch_y = volume[i: i + batch_size], labelmap[i:i + batch_size]
+
                 if cuda_available and (type(device)==int):
                     batch_x = batch_x.cuda(device)
                 out = model(batch_x)
@@ -260,7 +315,7 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
         print('Mean dice score: ', avg_dice_score)
         print('Mean dice score without background: ', avg_dice_score_wo_bg)
         print('all dice scores: ', dice_score_arr)
-        print('class wise mean dice scores: ', np.mean(dice_score_arr, axis=0)) #",".join(map(str, list(np.mean(dice_score_arr, axis=0)))))
+        print('class wise mean dice scores: ', np.mean(dice_score_arr, axis=0))
         class_dist = [dice_score_arr[:, c] for c in range(num_classes)]
 
         if logWriter:
@@ -271,6 +326,11 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
 
 
 def _segment_vol(file_path, model, orientation, batch_size, cuda_available, device, multi_channel=False, use_2channel=False, remap_config=None):
+    to_axis_dict = {
+        "AXI": 2,
+        "COR": 1,
+        "SAG": 0
+    }
     if multi_channel:
         volume, fat, water, label, class_weights, weights, header = du.load_and_preprocess_3channel(file_path,
                                                                                                        orientation=orientation,
@@ -281,13 +341,30 @@ def _segment_vol(file_path, model, orientation, batch_size, cuda_available, devi
         volume, fat, water = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(fat).type(
             torch.FloatTensor), torch.tensor(water).type(torch.FloatTensor)
     elif use_2channel:
-        volume, water, label, class_weights, weights, header = du.load_and_preprocess_2channel(file_path,
-                                                                                                    orientation=orientation,
-                                                                                                    remap_config=remap_config)
-        volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
+        # volume, water, label, class_weights, weights, header = du.load_and_preprocess_2channel(file_path,
+        #                                                                                             orientation=orientation,
+        #                                                                                             remap_config=remap_config)
+        # volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
+        # # fat = fat if len(fat.shape) == 4 else fat[:, np.newaxis, :, :]
+        # water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
+
+        img, label, water = nb.load(file_path[0]), nb.load(file_path[1]), nb.load(file_path[2])
+        volume, labelmap, water, class_weights, weights, header, affine = img.get_fdata(), label.get_fdata(), water.get_fdata(), None, None, img.header, img.affine
+        
+
+            #if len(thick_volume.shape) == 4 else thick_volume[:, np.newaxis, :, :]
         # fat = fat if len(fat.shape) == 4 else fat[:, np.newaxis, :, :]
-        water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
-        volume, water = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(water).type(torch.FloatTensor)
+
+        volume = np.rollaxis(volume, to_axis_dict[orientation], 0)
+        label = np.rollaxis(labelmap, to_axis_dict[orientation], 0)
+        water = np.rollaxis(water, to_axis_dict[orientation], 0)
+
+        thick_volume = []
+        for v, w in zip(volume, water):
+            thick_volume.append(np.stack([w, v], axis=0))
+        volume = thick_volume
+
+        volume = torch.tensor(volume).type(torch.FloatTensor) #, torch.tensor(labelmap).type(torch.LongTensor)
     else:
         volume, label, header = du.load_and_preprocess_eval(file_path,
                                                         orientation=orientation)
@@ -301,7 +378,7 @@ def _segment_vol(file_path, model, orientation, batch_size, cuda_available, devi
             batch_x = torch.cat((volume[i: i + batch_size], fat[i: i + batch_size], water[i: i + batch_size]),
                                          dim=1)
         elif use_2channel:
-            batch_x = torch.cat((volume[i: i + batch_size], water[i: i + batch_size]), dim=1)
+            batch_x = volume[i: i + batch_size] #torch.cat((volume[i: i + batch_size], water[i: i + batch_size]), dim=1)
         else:
             batch_x = volume[i: i + batch_size]
 
@@ -319,9 +396,9 @@ def _segment_vol(file_path, model, orientation, batch_size, cuda_available, devi
     volume_prediction = np.squeeze(volume_prediction)
     # volume_prediction = rotate_orientation(volume_prediction, orientation)
     if orientation == "AXI":
-        volume_prediction = volume_prediction.transpose((2, 1, 0))
-        reference_label = label.transpose((2, 1, 0))
-        volume_pred = volume_pred.permute((3, 1, 2, 0))
+        volume_prediction = volume_prediction.transpose((1, 2, 0))
+        reference_label = label.transpose((1, 2, 0))
+        volume_pred = volume_pred.permute((2, 1, 3, 0))
     elif orientation == "COR":
         volume_prediction = volume_prediction.transpose((1, 0, 2))
         reference_label = label.transpose((1, 0, 2))
@@ -696,10 +773,10 @@ def evaluate3view(coronal_model_path, axial_model_path, sagittal_model_path, vol
             ext = '.test'
             if did == 'KORA':
                 ext = '.val'
-            with open(os.path.join(volumes_txt_file, did, did + ext)) as file_handle:
+            # with open(os.path.join(volumes_txt_file, did, did + ext)) as file_handle:
+            with open(volumes_txt_file) as file_handle:
                 volumes_to_use += file_handle.read().splitlines()
-            file_paths += du.load_file_paths(data_dir, label_dir, did,
-                                             os.path.join(volumes_txt_file, did, did + ext))
+            file_paths += du.load_file_paths(data_dir, label_dir, did, volumes_txt_file)
     else:
         with open(volumes_txt_file) as file_handle:
             volumes_to_use = file_handle.read().splitlines()
@@ -794,7 +871,7 @@ def evaluate3view(coronal_model_path, axial_model_path, sagittal_model_path, vol
                 volume_prediction_cor = F.softmax(volume_prediction_cor, dim=1)
                 volume_prediction_sag = F.softmax(volume_prediction_sag, dim=1)
 
-                _, volume_prediction = torch.max(volume_prediction_axi + volume_prediction_cor + volume_prediction_sag,
+                _, volume_prediction = torch.max(volume_prediction_axi + volume_prediction_sag,
                                                  dim=1)
 
                 volume_prediction = (volume_prediction.cpu().numpy()).astype('float32')

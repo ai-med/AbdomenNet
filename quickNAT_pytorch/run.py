@@ -1,13 +1,13 @@
 import argparse
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 import torch
 from utils.evaluator import evaluate, evaluate2view, evaluate_dice_score, compute_vol_bulk, evaluate3view
 # from quicknat import QuickNat
 from quick_oct import QuickOct as mclass
-# from fastSurferCNN import FastSurferCNN as mclass
+# from fastSurferCNN import FastSurferCNN
 import inspect
 from settings import Settings
 from solver import Solver
@@ -23,6 +23,7 @@ import numpy as np
 import torch.utils.data as data
 # import torchvision.transforms as transforms
 from PIL import Image
+# import wandb
 
 # cudnn.deterministic = True
 # cudnn.benchmark = False
@@ -62,37 +63,64 @@ def estimate_weights_per_slice(labels, no_of_class=9):
 
     return np.array(weights_per_slice)
 
-
-transform = transforms(rotate_prob=0.5, deform_prob=0.5, denoise_prob=0.5)
-
+transform = transforms(rotate_prob=0.5, denoise_prob=0.5) # deform_prob=0.5, 
 
 class MRIDataset(data.Dataset):
 
-    def __init__(self, X_files, y_files, transforms=None):
+    def __init__(self, X_files, y_files, transforms=None, thickSlice=None, water_vols=None, fat_vols=None, orientation='AXI'):
         self.X_files = X_files
         self.y_files = y_files
         self.transforms = transforms
+        self.thickSlice = thickSlice
+        self.water_vols = water_vols
+        self.fat_vols = fat_vols
+
+        if orientation == 'AXI':
+            self.to_axis = 2
+        elif orientation == 'COR':
+            self.to_axis = 1
+        else:
+            self.to_axis = 0
+
+        # assert(self.thickSlice is None if self.water_vols is not None)
+        # assert(self.water_vols is None if self.thickSlice is not None)
 
         img_array = list()
         label_array = list()
+        water_array = list()
+        # fat_array = list()
         cw_array = list()
         w_array = list()
-        for vol_f, label_f in zip(self.X_files, self.y_files):
+
+        # for vol_f, label_f, water_f, fat_f in zip(self.X_files, self.y_files, self.water_vols, self.fat_vols):
+        for vol_f, label_f, water_f in zip(self.X_files, self.y_files, self.water_vols):
+        # for vol_f, label_f in zip(self.X_files, self.y_files):
             img, label = nb.load(vol_f), nb.load(label_f)
+            water = nb.load(water_f)
+            # fat = nb.load(fat_f)
+
             img_data = np.array(img.get_fdata())
             label_data = np.array(label.get_fdata())
+            water_data = np.array(water.get_fdata())
+            # fat_data = np.array(fat.get_fdata())
 
             # Transforming to Axial Manually.
-            img_data = np.rollaxis(img_data, 2, 0)
-            label_data = np.rollaxis(label_data, 2, 0)
-            # img_data = np.pad(img_data, ((0,0),(0,0),(8,8)), 'constant', constant_values=0)
-            # label_data = np.pad(label_data, ((0,0),(0,0),(8,8)), 'constant', constant_values=0)
-            
+
+            img_data = np.rollaxis(img_data, self.to_axis, 0)
+            label_data = np.rollaxis(label_data, self.to_axis, 0)
+            water_data = np.rollaxis(water_data, self.to_axis, 0)
+            # fat_data = np.rollaxis(fat_data, 2, 0)
+
+            img_data, _, water_data, label_data = self.remove_black_3channels(img_data, None, water_data, label_data)
+
             cw, _ = estimate_weights_mfb(label_data)
             w = estimate_weights_per_slice(label_data)
 
             img_array.extend(img_data)
             label_array.extend(label_data)
+            # print(img_data.shape, water_data.shape)
+            water_array.extend(water_data)
+            # fat_array.extend(fat_data)
             cw_array.extend(cw)
             w_array.extend(w)
             img.uncache()
@@ -101,29 +129,32 @@ class MRIDataset(data.Dataset):
 
         X = np.stack(img_array, axis=0) if len(img_array) > 1 else img_array[0]
         y = np.stack(label_array, axis=0) if len(label_array) > 1 else label_array[0]
+        water_ = np.stack(water_array, axis=0) if len(water_array) > 1 else water_array[0]
+        fat_ = None#np.stack(fat_array, axis=0) if len(fat_array) > 1 else fat_array[0]
         class_weights = np.stack(cw_array, axis=0) if len(cw_array) > 1 else cw_array[0]
-        weights = np.array(w_array)  # np.stack(w_array, axis=0) if len(w_array) > 1 else w_array[0]
-        self.y = y
-        # if self.transforms is not None:
-        #     self.X = X #if len(X.shape) == 4 else X[:, np.newaxis, :, :]
-        #     self.y = y
-            # for idx, sample in enumerate(zip(self.X, self.y)):
-            #     # img = np.asarray(img).astype(np.uint8)
-            #     sample = self.transforms(sample)
-            #     img, mask = sample
-            #     self.X[idx] = img
-            #     self.y[idx] = mask
-                
-        self.X = X #if len(X.shape) == 4 else X[:, np.newaxis, :, :]
-
+        weights = np.array(w_array)
+        self.y = y   
+        self.X = X 
+        self.water = water_
+        self.fat = fat_
         self.cw = class_weights
         self.w = weights
-        print(self.X.shape, self.y.shape, self.cw.shape, self.w.shape)
+
+        print(self.X.shape, self.y.shape, self.cw.shape, self.w.shape)#, self.water.shape)
 
     def __getitem__(self, index):
         img = self.X[index]
         label = self.y[index]
 
+        if self.water_vols is not None:
+            img = self.addWater(index, img)
+
+        if self.fat_vols is not None:
+            img = self.addFat(index, img)
+
+        if self.thickSlice is not None:
+            img = self.thickenTheSlice(index, img)
+            
         if self.transforms is not None:
             img, label = self.transforms((img, label))
 
@@ -134,8 +165,74 @@ class MRIDataset(data.Dataset):
         weights = torch.from_numpy(self.w[index])
         return img.type(torch.FloatTensor), label.type(torch.LongTensor), class_weights.type(torch.FloatTensor), weights.type(torch.FloatTensor)
 
+    def remove_black_3channels(self, data,fat,water, labels):
+        clean_data,clean_fat,clean_water, clean_labels = [], [],[],[]
+        for i, frame in enumerate(labels):
+            unique, counts = np.unique(frame, return_counts=True)
+            if counts[0] / sum(counts) < .99:
+                clean_labels.append(frame)
+                clean_data.append(data[i])
+                clean_water.append(water[i])
+                # clean_fat.append(fat[i])
+        return np.array(clean_data), np.array(clean_fat), np.array(clean_water), np.array(clean_labels)
+
+    def thickenSlices(self, indices):
+        thickenImages = []
+        for i in indices:
+            if self.thickSlice:
+                thickenImages.append(self.thickenTheSlice(i))
+            elif self.water_vols is not None and self.fat_vols is not None:
+                thickenImages.append(self.addFat(i, self.addWater(i)))
+            elif self.water_vols is not None:
+                thickenImages.append(self.addWater(i))
+            elif self.fat_vols is not None:
+                thickenImages.append(self.addFat(i))
+            else:
+                print('No thickening')
+
+
+        return np.array(thickenImages) # np.stack(thickenImages, axis=0)
+
+    def thickenTheSlice(self, index, img=None):
+        img = img if img is not None else self.X[index] 
+        if index < 2:
+                n1, n2 = index, index
+        else:
+            n1, n2 = index-1, index-2
+        
+        if index >= self.X.shape[0]-3:
+            p1, p2 = index, index
+        else:
+            p1, p2 = index+1, index+2
+
+        img_n1 = self.X[n1]
+        img_n2 = self.X[n2]
+        img_p1 = self.X[p1]
+        img_p2 = self.X[p2]
+        # print(n2, n1, index, p1, p2)
+        img_ts = [img_n2, img_n1, img, img_p1, img_p2]
+        thickenImg = np.stack(img_ts, axis=0)
+        return thickenImg
+
+    def addWater(self, index, img=None):
+        img = img if img is not None else self.X[index] 
+        wtr = self.water[index]
+        img = np.stack([wtr, img], axis=0)
+        return img
+
+    def addFat(self, index, img=None):
+        img = img if img is not None else self.X[index] 
+        ft = self.fat[index]
+        # ft = ft[np.newaxis, :, :] if len(img.shape) == 3 else ft
+        img = np.stack([img[0],img[1], ft], axis=0)
+        return img
+
     def getItem(self, index):
-        imgs = self.X[index]
+        if (self.thickSlice) or (self.water_vols is not None) or (self.fat_vols is not None):
+            imgs = self.thickenSlices(index)
+        else:
+            imgs = self.X[index]
+
         labels = self.y[index]
         imgs = imgs if len(imgs.shape) == 4 else imgs[:, np.newaxis, :, :]
         return imgs, labels
@@ -158,20 +255,31 @@ def load_data(data_params):
 
 
 def train(train_params, common_params, data_params, net_params):
-    
+    # train_data, test_data = load_data(data_params)
+    #
+    # train_loader = torch.utils.data.DataLoader(train_data, batch_size=train_params['train_batch_size'], shuffle=True,
+    #                                            num_workers=4, pin_memory=True)
+    # val_loader = torch.utils.data.DataLoader(test_data, batch_size=train_params['val_batch_size'], shuffle=False,
+    #                                          num_workers=4, pin_memory=True)
+
     arch_file_path = inspect.getfile(mclass)
+    setting_path = common_params['setting_path']
     train_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume/**.nii.gz"))
-    train_labels = sorted(glob.glob(f"{data_params['data_dir']}/train/label9/**.nii.gz"))
+    train_w_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume_w/**.nii.gz"))
+    # train_f_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume_f/**.nii.gz"))
+    train_labels = sorted(glob.glob(f"{data_params['data_dir']}/train/label/**.nii.gz"))
 
     test_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume/**.nii.gz"))
-    test_labels = sorted(glob.glob(f"{data_params['data_dir']}/test/label9/**.nii.gz"))
+    test_w_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume_w/**.nii.gz"))
+    # test_f_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume_f/**.nii.gz"))
+    test_labels = sorted(glob.glob(f"{data_params['data_dir']}/test/label/**.nii.gz"))
 
-    ds_train = MRIDataset(train_volumes, train_labels, transform)
+    ds_train = MRIDataset(train_volumes, train_labels, transforms=transform, thickSlice=None, water_vols=train_w_volumes, fat_vols=None, orientation='SAG')
     train_loader = torch.utils.data.DataLoader(ds_train, batch_size=train_params['train_batch_size'], shuffle=True,
                                                num_workers=4, pin_memory=True)
 
-    ds_test = MRIDataset(test_volumes, test_labels)
-    val_loader = torch.utils.data.DataLoader(ds_test, batch_size=train_params['train_batch_size'], shuffle=False,
+    ds_test = MRIDataset(test_volumes, test_labels, transforms=None, thickSlice=None, water_vols=test_w_volumes, fat_vols=None, orientation='SAG')
+    val_loader = torch.utils.data.DataLoader(ds_test, batch_size=train_params['val_batch_size'], shuffle=False,
                                              num_workers=4, pin_memory=True)
 
     if train_params['use_pre_trained']:
@@ -183,8 +291,7 @@ def train(train_params, common_params, data_params, net_params):
             empty_model = mclass(net_params_)
         # elif net_params['type'] == 'fastsurfer':
         #     model = FastSurferCNN(net_params)
-        #     empty_model = FastSurferCNN(net_params)
-    # model = torch.nn.DataParallel(model, device_ids=[0, 1])
+
        # {"lr": train_params['learning_rate'],
     #   "momentum": train_params['momentum'],
     #   "weight_decay": train_params['optim_weight_decay']},
@@ -192,6 +299,8 @@ def train(train_params, common_params, data_params, net_params):
 #                                    "betas": train_params['optim_betas'],
 #                                    "eps": train_params['optim_eps'],
 #                                    "weight_decay": train_params['optim_weight_decay']},
+
+    # wandb.watch(model)
 
     solver = Solver(model,
                     device=common_params['device'],
@@ -207,14 +316,14 @@ def train(train_params, common_params, data_params, net_params):
                     use_last_checkpoint=train_params['use_last_checkpoint'],
                     log_dir=common_params['log_dir'],
                     exp_dir=common_params['exp_dir'],
-                    arch_file_path=arch_file_path)
+                    arch_file_path=[arch_file_path,setting_path])
 
     solver.train(train_loader, val_loader)
-    model.save(final_model_path)
+    final_model_path = os.path.join(common_params['save_model_dir'], train_params['final_model_file'])
+    # model.save(final_model_path)
     solver.model = empty_model
-    best_model_path = os.path.join(common_params['save_model_dir'], train_params['final_model_file'])
-    solver.save_best_model(best_model_path)
-    print("final model saved @ " + str(best_model_path))
+    solver.save_best_model(final_model_path)
+    print("final model saved @ " + str(final_model_path))
 
 
 def evaluate(eval_params, net_params, data_params, common_params, train_params):
@@ -235,6 +344,7 @@ def evaluate(eval_params, net_params, data_params, common_params, train_params):
     data_id = eval_params['data_id']
     multi_channel = data_params['use_3channel']
     use_2channel = data_params['use_2channel']
+    thick_channel = data_params['thick_channel']
     logWriter = LogWriter(num_classes, log_dir, exp_name, labels=labels)
 
     avg_dice_score, class_dist = evaluate_dice_score(eval_model_path,
@@ -249,7 +359,8 @@ def evaluate(eval_params, net_params, data_params, common_params, train_params):
                                                         device,
                                                         logWriter,
                                                         multi_channel=multi_channel,
-                                                        use_2channel=use_2channel)
+                                                        use_2channel=use_2channel,
+                                                        thick_ch=thick_channel)
     logWriter.close()
 
 
@@ -357,24 +468,31 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', '-m', required=True, help='run mode, valid values are train and eval')
-    parser.add_argument('--setting_path', '-sp', required=False, help='optional path to settings_eval_nako.ini')
+    parser.add_argument('--setting_path', '-sp', required=False, default=None, help='optional path to settings_eval_nako.ini')
     args = parser.parse_args()
+    if args.setting_path is None:
+        args.setting_path = '/home/jyotirmay/remote_projects/abdominal_segmentation/quickNAT_pytorch/settings_merged_jj.ini'
 
-    settings = Settings('/home/abhijit/Jyotirmay/abdominal_segmentation/quickNAT_pytorch/settings_merged_jj.ini')
+    settings = Settings(args.setting_path)
+
+    
+    exp_name = settings['TRAINING']['exp_name']
+    print(exp_name)
+    # wandb.login(key='85588d16512e76335148306ccccf96e543c5f627')
+    # wandb.init(name='r0-run', project=settings['TRAINING']['exp_name'], config=settings)
+
     common_params, data_params, net_params, train_params, eval_params = settings['COMMON'], settings['DATA'], \
                                                                         settings[
                                                                             'NETWORK'], settings['TRAINING'], \
                                                                         settings['EVAL']
+    common_params['setting_path'] = args.setting_path
     if args.mode == 'train':
         train(train_params, common_params, data_params, net_params)
     elif args.mode == 'eval':
         evaluate(eval_params, net_params, data_params, common_params, train_params)
     elif args.mode == 'eval_bulk':
         logging.basicConfig(filename='error.log')
-        if args.setting_path is not None:
-            settings_eval = Settings(args.setting_path)
-        else:
-            settings_eval = Settings('settings_kora.ini')
+        settings_eval = Settings(args.setting_path)
         evaluate_bulk(settings_eval['EVAL_BULK'])
     elif args.mode == 'clear':
         shutil.rmtree(os.path.join(common_params['exp_dir'], train_params['exp_name']))

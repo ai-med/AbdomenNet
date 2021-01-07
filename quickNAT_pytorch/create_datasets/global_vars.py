@@ -10,7 +10,7 @@ DEFAULT_VIEW = ['Saggital', 'Coronal', 'Axial']
 DEFAULT_REFERENCE_VIEW = 'Sagittal'
 OPTIMIZATION = 'N4'  # Intensity, Min-Max, Fat-Water-Swap
 IS_CROPPING = True
-DEFAULT_OUTPUT_PATH = '/mnt/nas/Abhijit/Jyotirmay/abdominal_segmentation/temp'
+DEFAULT_OUTPUT_PATH = '/mnt/nas/Abhijit/Jyotirmay/abdominal_segmentation/temp2'
 DEFAULT_LINSPACE = 30
 
 
@@ -30,13 +30,16 @@ HIST_MATCHING_VOL_PATH = '/mnt/nas/Data_WholeBody/NAKO/NAKO_200/MRI/100129/10012
 
 # 'SUBCUTANEOUS':['subcutaneous', 'subcutan'], 'THYROIDGLAND':['thyroid']
 
-volume_txt_file = f'datasets/{dataset}/larger_vols.txt' #volumes.txt'
+volume_txt_file = f'datasets/{dataset}/volumes.txt' #volumes.txt'
 if DATASET == 'KORA':
     data_dir = "/mnt/nas/Data_WholeBody/KORA/KORA_all/KORA_Nifti"
+    SAMPLING = True
 elif DATASET == 'NAKO':
     data_dir = f"/mnt/nas/Data_WholeBody/NAKO/NAKO_200/MRI"
+    SAMPLING = True
 elif DATASET == 'UKB':
     data_dir = "/mnt/nas/Data_WholeBody/UKBiobank/body/body_nifti"
+    SAMPLING = False
 else:
     raise Exception('NO DATA DIRECTORY FOUND!!!')
 
@@ -44,8 +47,8 @@ label_dir = f'datasets/lablmaps/{DATASET}'
 
 n4_corrected_data_dir = f"{DEFAULT_OUTPUT_PATH}/{DATASET}/n4_corrected_2"
 
-processed_path = f'{DEFAULT_OUTPUT_PATH}/{DATASET}/'
-processed_dir = f'{DEFAULT_OUTPUT_PATH}/{DATASET}/processed'
+processed_path = f'{DEFAULT_OUTPUT_PATH}/{DATASET}/' if SAMPLING else f'{DEFAULT_OUTPUT_PATH}/{DATASET}/unsampled'
+processed_dir = f'{DEFAULT_OUTPUT_PATH}/{DATASET}/processed' if SAMPLING else f'{DEFAULT_OUTPUT_PATH}/{DATASET}/processed/unsampled'
 
 one_time_n4_optimization = True
 vol_to_check_list = None

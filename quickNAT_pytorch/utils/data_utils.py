@@ -5,7 +5,7 @@ import nibabel as nb
 import numpy as np
 import torch
 import torch.utils.data as data
-# from torchvision import transforms
+from torchvision import transforms
 import utils.preprocessor as preprocessor
 #import preprocessor
 # transform_train = transforms.Compose([
@@ -273,7 +273,7 @@ def load_data_3channel(file_path, orientation):
 
 
 def load_data_2channel(file_path, orientation):
-    volume_nifty, volume_water_nifty, labelmap_nifty = nb.load(file_path[0]),nb.load(file_path[2]), nb.load(file_path[3])
+    volume_nifty, volume_water_nifty, labelmap_nifty = nb.load(file_path[0]),nb.load(file_path[2]), nb.load(file_path[1])
     volume, water, labelmap = volume_nifty.get_fdata(),volume_water_nifty.get_fdata(), labelmap_nifty.get_fdata()
     volume = (volume - np.min(volume)) / (np.max(volume) - np.min(volume))
     # fat = (fat - np.min(fat)) / (np.max(fat) - np.min(fat))
@@ -384,28 +384,36 @@ def load_file_paths_3channel(data_dir, label_dir, data_id, volumes_txt_file=None
             volumes_to_use = file_handle.read().splitlines()
     else:
         volumes_to_use = [name for name in os.listdir(data_dir)]
-    print('data id ', data_id)
-    if data_id == 'KORA':
-        file_paths = [
-            [os.path.join(data_dir, data_id, 'data', vol, 'resampled_normalized_image.nii.gz'), os.path.join(data_dir, data_id, 'data', vol, 'resampled_normalized_fat.nii.gz'), os.path.join(data_dir, data_id, 'data', vol, 'resampled_normalized_water.nii.gz'), os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
-            for
-            vol in volumes_to_use]
-    elif data_id == 'NAKO':
-        file_paths = [
-            [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
-             os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
-            for
-            vol in volumes_to_use]
-    elif data_id == 'UKB':
-        file_paths = [
-            [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
-             os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
-            for
-            vol in volumes_to_use]
-    else:
-        raise ValueError("Invalid entry, valid options are MALC, ADNI, CANDI and IBSR")
+
+    file_paths = [
+        [os.path.join(data_dir, f'{vol}.nii.gz'), os.path.join(label_dir, f'{vol}.nii.gz'), os.path.join(f'{data_dir}_w', f'{vol}.nii.gz'), os.path.join(f'{data_dir}_f', f'{vol}.nii.gz')]
+        for
+        vol in volumes_to_use]
 
     return file_paths
+
+    # print('data id ', data_id)
+    # if data_id == 'KORA':
+    #     file_paths = [
+    #         [os.path.join(data_dir, data_id, 'data', vol, 'resampled_normalized_image.nii.gz'), os.path.join(data_dir, data_id, 'data', vol, 'resampled_normalized_fat.nii.gz'), os.path.join(data_dir, data_id, 'data', vol, 'resampled_normalized_water.nii.gz'), os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+    #         for
+    #         vol in volumes_to_use]
+    # elif data_id == 'NAKO':
+    #     file_paths = [
+    #         [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
+    #          os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+    #         for
+    #         vol in volumes_to_use]
+    # elif data_id == 'UKB':
+    #     file_paths = [
+    #         [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
+    #          os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+    #         for
+    #         vol in volumes_to_use]
+    # else:
+    #     raise ValueError("Invalid entry, valid options are MALC, ADNI, CANDI and IBSR")
+
+    # return file_paths
 
 def load_file_paths_2channel(data_dir, label_dir, data_id, volumes_txt_file=None):
     """
@@ -423,28 +431,36 @@ def load_file_paths_2channel(data_dir, label_dir, data_id, volumes_txt_file=None
             volumes_to_use = file_handle.read().splitlines()
     else:
         volumes_to_use = [name for name in os.listdir(data_dir)]
-    print('data id ', data_id)
-    if data_id == 'KORA':
-        file_paths = [
-            [os.path.join(data_dir, data_id, 'data', vol, 'resampled_normalized_image.nii.gz'), os.path.join(data_dir, data_id, 'data', vol, 'resampled_normalized_water.nii.gz'), os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
-            for
-            vol in volumes_to_use]
-    elif data_id == 'NAKO':
-        file_paths = [
-            [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
-             os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
-            for
-            vol in volumes_to_use]
-    elif data_id == 'UKB':
-        file_paths = [
-            [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
-             os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
-            for
-            vol in volumes_to_use]
-    else:
-        raise ValueError("Invalid entry, valid options are MALC, ADNI, CANDI and IBSR")
+
+    file_paths = [
+        [os.path.join(data_dir, f'{vol}.nii.gz'), os.path.join(label_dir, f'{vol}.nii.gz'), os.path.join(f'{data_dir}_w', f'{vol}.nii.gz')]
+        for
+        vol in volumes_to_use]
 
     return file_paths
+
+    # print('data id ', data_id)
+    # if data_id == 'KORA':
+    #     file_paths = [
+    #         [os.path.join(data_dir, data_id, 'data', vol, 'resampled_normalized_image.nii.gz'), os.path.join(data_dir, data_id, 'data', vol, 'resampled_normalized_water.nii.gz'), os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+    #         for
+    #         vol in volumes_to_use]
+    # elif data_id == 'NAKO':
+    #     file_paths = [
+    #         [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
+    #          os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+    #         for
+    #         vol in volumes_to_use]
+    # elif data_id == 'UKB':
+    #     file_paths = [
+    #         [os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
+    #          os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
+    #         for
+    #         vol in volumes_to_use]
+    # else:
+    #     raise ValueError("Invalid entry, valid options are MALC, ADNI, CANDI and IBSR")
+
+    # return file_paths
 
 
 def load_file_paths(data_dir, label_dir, data_id, volumes_txt_file=None):
@@ -466,13 +482,9 @@ def load_file_paths(data_dir, label_dir, data_id, volumes_txt_file=None):
     print('data id ', data_id)
     if data_id == 'KORA':
         file_paths = [
-            [os.path.join(data_dir, f'{vol}.nii.gz'), os.path.join(label_dir, f'{vol}.nii.gz')]
+            [os.path.join(data_dir, f'{vol}.nii.gz'), os.path.join(data_dir, f'{vol}_w.nii.gz'), os.path.join(label_dir, f'{vol}.nii.gz')]
             for
             vol in volumes_to_use]
-        # file_paths = [[os.path.join(data_dir, data_id,'data',vol, 'resampled_normalized_image.nii.gz'),
-        #     os.path.join(label_dir, data_id,'data',vol, 'resampled_segm.nii.gz')]
-        #     for
-        #     vol in volumes_to_use]
     elif data_id == 'NAKO':
         file_paths = [
             [os.path.join(data_dir, f'{vol}.nii.gz'), os.path.join(label_dir, f'{vol}.nii.gz')]

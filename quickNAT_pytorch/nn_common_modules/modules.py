@@ -19,6 +19,8 @@ from squeeze_and_excitation import squeeze_and_excitation as se
 import torch.nn.functional as F
 from math import ceil,floor
 
+from torch.nn.modules.utils import _single, _pair, _triple
+
 class DenseBlock(nn.Module):
     """Block with dense connections
 
@@ -801,12 +803,6 @@ class FSDecoderBlock(FSDenseBlock):
             out_block = self.drop_out(out_block)
         return out_block
 
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.nn.modules.utils import _single, _pair, _triple
-
 class OctConv2d(nn.modules.conv._ConvNd):
     """Unofficial implementation of the Octave Convolution in the "Drop an Octave" paper.
     oct_type (str): The type of OctConv you'd like to use. ['first', 'A'] both stand for the the first Octave Convolution.
@@ -981,30 +977,6 @@ class OctaveDenseBlock(nn.Module):
         conv2_out_size = int(
             params['num_channels'] + params['num_filters'] + params['num_filters'])
 
-        # self.conv1 = nn.Conv2d(in_channels=params['num_channels'], out_channels=params['num_filters'],
-        #                        kernel_size=(
-        #                            params['kernel_h'], params['kernel_w']),
-        #                        padding=(padding_h, padding_w),
-        #                        stride=params['stride_conv'])
-        # self.conv2 = nn.Conv2d(in_channels=conv1_out_size, out_channels=params['num_filters'],
-        #                        kernel_size=(
-        #                            params['kernel_h'], params['kernel_w']),
-        #                        padding=(padding_h, padding_w),
-        #                        stride=params['stride_conv'])
-        # self.conv3 = nn.Conv2d(in_channels=conv2_out_size, out_channels=params['num_filters'],
-        #                        kernel_size=(1, 1),
-        #                        padding=(0, 0),
-        #                        stride=params['stride_conv'])
-        # self.batchnorm1 = nn.BatchNorm2d(num_features=params['num_channels'])
-        # self.batchnorm2 = nn.BatchNorm2d(num_features=conv1_out_size)
-        # self.batchnorm3 = nn.BatchNorm2d(num_features=conv2_out_size)
-        # self.prelu = nn.PReLU()
-
-
-        # self.convinp = OctConv2d('first', in_channels=params['num_channels'], out_channels=params['num_filters'], kernel_size=(
-        #                             params['kernel_h'], params['kernel_w']), padding=(padding_h, padding_w), 
-        #                             stride=params['stride_conv'])
-
         self.conv1 = OctConv2d('first', in_channels=params['num_channels'], out_channels=params['num_filters'], kernel_size=(
                                     params['kernel_h'], params['kernel_w']), padding=(padding_h, padding_w), 
                                     stride=params['stride_conv'])
@@ -1014,32 +986,15 @@ class OctaveDenseBlock(nn.Module):
                                     params['kernel_h'], params['kernel_w']), padding=(padding_h, padding_w),
                                 stride=params['stride_conv'])
 
-        # self.conv3 = OctConv2d('regular', in_channels=conv2_out_size, out_channels=params['num_filters'], kernel_size=(1, 1), padding=(0, 0),
-        #                         stride=params['stride_conv'])
 
         self.conv3 = OctConv2d('last', in_channels=conv2_out_size, out_channels=params['num_filters'], kernel_size=(
                                     params['kernel_h'], params['kernel_w']), padding=(padding_h, padding_w), 
                                     stride=params['stride_conv'])
 
         self.avgpool1 = nn.AvgPool2d(2)
-        # self.avgpool2 = nn.AvgPool2d(2)
-        # self.avgpool3 = nn.AvgPool2d(2)
 
-
-        # self.batchnorm1_h = None if alpha_in == 1 else nn.BatchNorm2d(
-        #     num_features=int(params['num_channels'] * (1 - alpha_in)))
-        # self.batchnorm1_l = None if alpha_in == 0 else nn.BatchNorm2d(
-        #     num_features=int(params['num_channels'] * alpha_in))
         alpha_in, alpha_out = 0.5, 0.5
 
-        # self.batchnorm2_h = None if alpha_out == 1 else nn.BatchNorm2d(
-        #     num_features=int(conv1_out_size * (1 - alpha_out)))
-        # self.batchnorm2_l = None if alpha_out == 0 else nn.BatchNorm2d(num_features=int(conv1_out_size * alpha_out))
-
-        # self.batchnorm3_h = None if alpha_out == 1 else nn.BatchNorm2d(
-        #     num_features=int(conv2_out_size * (1 - alpha_out)))
-        # self.batchnorm3_l = None if alpha_out == 0 else nn.BatchNorm2d(num_features=int(conv2_out_size * alpha_out))
-        print(step)
         if step:
             self.batchnorm1 = nn.BatchNorm2d(num_features=params['num_channels'])
 
@@ -1076,21 +1031,9 @@ class OctaveDenseBlock(nn.Module):
         :rtype: torch.tensor [FloatTensor]
         """
 
-        # o1 = self.batchnorm1(input)
-        # o2 = self.prelu(o1)
-        # o3 = self.conv1(o2)
-        # o4 = torch.cat((input, o3), dim=1)
-        # o5 = self.batchnorm2(o4)
-        # o6 = self.prelu(o5)
-        # o7 = self.conv2(o6)
-        # o8 = torch.cat((input, o3, o7), dim=1)
-        # o9 = self.batchnorm3(o8)
-        # o10 = self.prelu(o9)
-        # out = self.conv3(o10)
-        # return out
-
         o1 = self.batchnorm1(input)
         o2 = self.prelu(o1)
+        
         ch = input.shape[1] // 2
         inp_h, inp_l = input[:, :ch, :, :], input[:, ch:, :, :]
         inp_ll = self.avgpool1(inp_l)
@@ -1103,10 +1046,6 @@ class OctaveDenseBlock(nn.Module):
         o6_h = self.prelu_h(o5_h)
         o6_l = self.prelu_l(o5_l)
         o7_h, o7_l = self.conv2((o6_h, o6_l))
-
-        # inp_lll = self.avgpool2(inp_ll)
-        # o3_ll = self.avgpool3(o3_l)
-
 
         o8_h = torch.cat((inp_h, o3_h, o7_h), dim=1)
         o8_l = torch.cat((inp_ll, o3_l, o7_l), dim=1)

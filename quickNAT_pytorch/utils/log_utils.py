@@ -58,7 +58,9 @@ class LogWriter(object):
         print('epoch ' + phase + ' loss = ' + str(loss))
 
     def cm_per_epoch(self, phase, output, correct_labels, epoch):
+
         print("Confusion Matrix...", end='', flush=True)
+        # print(correct_labels)
         classes = np.arange(0,9)
         _, cm = eu.dice_confusion_matrix(output, correct_labels, classes, mode=phase)
         self.plot_cm('confusion_matrix', phase, cm, self.labels, classes, epoch)
@@ -108,9 +110,9 @@ class LogWriter(object):
 
             ds_mean = torch.mean(ds2)
         else:
-            ds = eu.dice_score_perclass(output, correct_labels, np.arange(0,self.num_class))
+            ds = eu.dice_score_perclass(output, correct_labels, np.arange(0,self.num_class), mode=phase)
             self.plot_dice_score(phase, 'dice_score_per_epoch', ds, 'Dice Score', self.labels, self.num_class, epoch)
-            ds_mean = torch.mean(ds)
+            ds_mean = torch.mean(ds[1:]) #Excluding Background
         print("DONE", flush=True)
         return ds_mean.item()
 

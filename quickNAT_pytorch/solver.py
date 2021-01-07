@@ -2,8 +2,8 @@ import glob
 import os
 
 import numpy as np
-import shutil
 import torch
+import shutil
 from nn_common_modules import losses as additional_losses
 from torch.optim import lr_scheduler
 
@@ -60,11 +60,12 @@ class Solver(object):
         common_utils.create_if_not(exp_dir_path)
         common_utils.create_if_not(os.path.join(exp_dir_path, CHECKPOINT_DIR))
         self.exp_dir_path = exp_dir_path
-        
+
         self.save_architectural_files(arch_file_path)
         
         self.log_nth = log_nth
         self.logWriter = LogWriter(num_class, log_dir, exp_name, use_last_checkpoint, labels)
+        # self.wandb = wandb
 
         self.use_last_checkpoint = use_last_checkpoint
 
@@ -77,8 +78,7 @@ class Solver(object):
         if use_last_checkpoint:
             self.load_checkpoint()
 
-        print(self.start_epoch, self.start_iteration, self.best_ds_mean, self.best_ds_mean_epoch)
-
+        print(self.best_ds_mean, self.best_ds_mean_epoch, self.start_epoch)
     # TODO:Need to correct the CM and dice score calculation.
     def train(self, train_loader, val_loader):
         """
@@ -89,6 +89,7 @@ class Solver(object):
         - val_loader: val data in torch.utils.data.DataLoader
         """
         model, optim, scheduler = self.model, self.optim, self.scheduler
+        # self.wandb.watch(model)
         swa_model, swa_scheduler, swa_start = self.swa_model, self.swa_scheduler, self.swa_start
         dataloaders = {
             'train': train_loader,
@@ -111,7 +112,6 @@ class Solver(object):
                 y_list = []
                 if phase == 'train':
                     model.train()
-                    # scheduler.step(epoch)
                 else:
                     model.eval()
                 for i_batch, sample_batched in enumerate(dataloaders[phase]):
@@ -119,29 +119,17 @@ class Solver(object):
                     y = sample_batched[1].type(torch.LongTensor)
                     w = sample_batched[3].type(torch.FloatTensor)
                     wd = sample_batched[2].type(torch.FloatTensor)
-                    #print('dice weights ', wd.shape)
+
                     if model.is_cuda:
                         X, y, w, wd = X.cuda(self.device, non_blocking=True), y.cuda(self.device, non_blocking=True), \
                                        w.cuda(self.device, non_blocking=True), wd.cuda(self.device, non_blocking=True)
-                    #print('input shape ', X.shape)
+
                     output = model(X)
-                    #print(X.shape)
-                    #print(y.shape)
-                    #print(output.shape)
                     if phase == 'val':
-                        #print(X.shape)
-                        #print(y.shape)
-                        #print(output.shape)
                         pass
-                    #print('output shape ', output.shape)
-                    #print('target shape ', y.shape)
-                    #print('weights shape ', w.shape)
-                    #print('min target ', torch.min(y))
-                    #print('max target ', torch.max(y))
-                    #print('min output ', torch.min(output))
-                    #print('max output ', torch.max(output))
+
                     loss = self.loss_func(output, y, wd, None)
-                    # wandb.log({"loss": loss})
+
                     if phase == 'train':
                         optim.zero_grad()
                         loss.backward()
@@ -155,7 +143,6 @@ class Solver(object):
                         if i_batch % self.log_nth == 0:
                             self.logWriter.loss_per_iter(loss.item(), i_batch, current_iteration)
                         current_iteration += 1
-
 
                     loss_arr.append(loss.item())
 
@@ -171,29 +158,34 @@ class Solver(object):
                         else:
                             print("100%", flush=True)
 
-
                 with torch.no_grad():
                     out_arr, y_arr = torch.cat(out_list), torch.cat(y_list)
                     self.logWriter.loss_per_epoch(loss_arr, phase, epoch)
                     index = np.random.choice(len(dataloaders[phase].dataset.X), 3, replace=False)
-                    print("index")
+                    print("index", index)
                     val_imgs, val_labels = dataloaders[phase].dataset.getItem(index)
-                    self.logWriter.image_per_epoch(val_imgs, model.predict(val_imgs, self.device),
-                                                   val_labels, phase, epoch)
+                    predicted_imgs = model.predict(val_imgs, self.device)
+                    if val_imgs.shape[1] > 1:
+                        mid_slice = val_imgs.shape[1]//2
+                        val_imgs = val_imgs[:, mid_slice, :, :]
+                    self.logWriter.image_per_epoch(val_imgs, predicted_imgs, val_labels, phase, epoch)
                     self.logWriter.cm_per_epoch(phase, out_arr, y_arr, epoch)
+
                     ds_mean = self.logWriter.dice_score_per_epoch(phase, out_arr, y_arr, epoch)
                     if phase == 'val':
                         if ds_mean > self.best_ds_mean:
                             self.best_ds_mean = ds_mean
                             self.best_ds_mean_epoch = epoch
 
+                        print(out_arr.shape, epoch, ds_mean, self.best_ds_mean, self.best_ds_mean_epoch)
+
             print("==== Epoch [" + str(epoch) + " / " + str(self.num_epochs) + "] DONE ====")
             self.save_checkpoint({
                 'epoch': epoch + 1,
                 'start_iteration': current_iteration + 1,
+                'arch': self.model_name,
                 'best_ds_mean': self.best_ds_mean,
                 'best_ds_mean_epoch': self.best_ds_mean_epoch,
-                'arch': self.model_name,
                 'state_dict': model.state_dict(),
                 'optimizer': optim.state_dict(),
                 'scheduler': scheduler.state_dict()
@@ -205,22 +197,23 @@ class Solver(object):
         print('FINISH.')
         self.logWriter.close()
 
-    def save_architectural_files(self, arch_file_path):
-        if arch_file_path is not None:
+    def save_architectural_files(self, arch_file_paths):
+        if arch_file_paths is not None:
+            arch_file_path, setting_path = arch_file_paths
             destination = os.path.join(self.exp_dir_path, ARCHITECTURE_DIR)
             common_utils.create_if_not(destination)
             arch_base = "/".join(arch_file_path.split('/')[:-1])
-            print(arch_base, destination+'/model.py')
+            print(arch_file_path, arch_base, setting_path, destination+'/model.py')
             shutil.copy(arch_file_path, destination+'/model.py')
             shutil.copy(f'{arch_base}/run.py', f'{destination}/run.py')
             shutil.copy(f'{arch_base}/solver.py', f'{destination}/solver.py')
             shutil.copy(f'{arch_base}/utils/evaluator.py', f'{destination}/utils-evaluator.py')
             shutil.copy(f'{arch_base}/nn_common_modules/losses.py', f'{destination}/nn_common_modules-losses.py')
             shutil.copy(f'{arch_base}/nn_common_modules/modules.py', f'{destination}/nn_common_modules-modules.py')
-            shutil.copy(f'{arch_base}/settings_merged_jj.ini', f'{destination}/settings_merged_jj.ini')
+            shutil.copy(f'{setting_path}', f'{destination}/settings.ini')
         else:
             print('No Architectural file!!!')
-
+            
     def save_best_model(self, path):
         """
         Save model with its parameters to the given path. Conventionally the
@@ -230,6 +223,7 @@ class Solver(object):
         """
         print('Saving model... %s' % path)
         print('Best Model at Epoch: ' + str(self.best_ds_mean_epoch))
+        print('Best Model with val Dice Score: ' + str(self.best_ds_mean))
         self.load_checkpoint(self.best_ds_mean_epoch)
 
         torch.save(self.model, path)
@@ -256,8 +250,9 @@ class Solver(object):
         self.logWriter.log("=> loading checkpoint '{}'".format(file_path))
         checkpoint = torch.load(file_path)
         self.start_epoch = checkpoint['epoch']
-        self.best_ds_mean = checkpoint['best_ds_mean']
-        self.best_ds_mean_epoch = checkpoint['best_ds_mean_epoch']
+        if 'best_ds_mean' in checkpoint.keys():
+            self.best_ds_mean = checkpoint['best_ds_mean']
+            self.best_ds_mean_epoch = checkpoint['best_ds_mean_epoch']
         self.start_iteration = checkpoint['start_iteration']
         self.model.load_state_dict(checkpoint['state_dict'])
         self.optim.load_state_dict(checkpoint['optimizer'])

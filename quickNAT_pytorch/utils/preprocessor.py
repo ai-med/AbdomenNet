@@ -127,7 +127,7 @@ def remove_black_3channels(data,fat,water, labels):
             clean_labels.append(frame)
             clean_data.append(data[i])
             clean_water.append(water[i])
-            clean_fat.append(fat[i])
+            # clean_fat.append(fat[i])
     return np.array(clean_data), np.array(clean_fat), np.array(clean_water), np.array(clean_labels)
 
 def remove_black(data, labels):

@@ -189,26 +189,35 @@ def apply_bias_field(opp_img, bias_field_img, opp_file, n4_dict, vol_id):
     n4_dict['OPP_CORRECTED'] = f'{n4_corrected_data_dir}/vol/{vol_id}/{new_filename}_n4_corrected.nii.gz'
     return n4_dict
 
-def multi_vol_stitching(images, is_label=False):
-    if len(images) == 1:
-        return images[0]
-    elif len(images) == 0:
+def multi_vol_stitching(images, is_label=False, sampling=True):
+    if len(images) == 0:
         raise Exception("Empty Image List!")
 
     images_sorted = sorted(images, key=lambda im: im.header['qoffset_z'], reverse=True)
     img_0 = images_sorted[0]
 
     mode = 'nearest' if is_label else 'constant'
-    img_0 = resample_to_output(img_0, TARGET_RESOLUTION, order=3, mode=mode, cval=0.0)
-
+    order = 0 if is_label else 3
+#     img_0 = resample_to_output(img_0, TARGET_RESOLUTION, order=order, mode=mode, cval=0.0)
+    
+    if len(images) == 1:
+        if sampling:
+            img_0 = resample_to_output(img_0, TARGET_RESOLUTION, order=order, mode=mode, cval=0.0)
+        print(img_0.affine)
+        return img_0
+    
     for idx, img_1 in enumerate(images_sorted[1:]):
         print(f'{idx}th img for stitching...')
-        img_1 = resample_to_output(img_1, TARGET_RESOLUTION, order=3, mode=mode, cval=0.0)
+#         img_1 = resample_to_output(img_1, TARGET_RESOLUTION, order=order, mode=mode, cval=0.0)
         target_affine = img_0.affine.copy()
         target_affine[2, 3] = img_1.affine[2, 3].copy()
         target_shape = img_0.shape[:2] + img_1.shape[2:]
         img_1 = resample_from_to(img_1, [target_shape, target_affine])
         img_0 = vol_stitching(img_0, img_1)
+    
+    if sampling:
+        img_0 = resample_to_output(img_0, TARGET_RESOLUTION, order=order, mode=mode, cval=0.0)
+    print(img_0.affine)
     return img_0
 
 def vol_stitching(im_0, im_1):
