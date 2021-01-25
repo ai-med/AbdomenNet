@@ -119,16 +119,27 @@ def reduce_slices(data, labels, skip_Frame=40):
 
     return data_reduced, labels_reduced
 
-def remove_black_3channels(data,fat,water, labels):
-    clean_data,clean_fat,clean_water, clean_labels = [], [],[],[]
+def remove_black_3channels(data,fat,water, labels, inv, return_points=False):
+    clean_data,clean_fat,clean_water, clean_labels, clean_in = [], [],[],[], []
+    start, end = 0,0
     for i, frame in enumerate(labels):
+        # print(i)
         unique, counts = np.unique(frame, return_counts=True)
         if counts[0] / sum(counts) < .99:
+            if start == 0:
+                start = i
+            if i>end:
+                end =i
+            # print(start, end)
             clean_labels.append(frame)
             clean_data.append(data[i])
             clean_water.append(water[i])
             # clean_fat.append(fat[i])
-    return np.array(clean_data), np.array(clean_fat), np.array(clean_water), np.array(clean_labels)
+            clean_in.append(inv[i])
+    if return_points:
+        return np.array(clean_data), np.array(clean_fat), np.array(clean_water), np.array(clean_labels), np.array(clean_in), start, end+1
+    else:
+        return np.array(clean_data), np.array(clean_fat), np.array(clean_water), np.array(clean_labels), np.array(clean_in)
 
 def remove_black(data, labels):
     clean_data, clean_labels = [], []

@@ -89,23 +89,23 @@ class MRIDataset(data.Dataset):
         img_array = list()
         label_array = list()
         water_array = list()
-        # fat_array = lisNonet()
+        fat_array = list()
         in_array = list()
         cw_array = list()
         w_array = list()
 
-        for vol_f, label_f, water_f, in_f in zip(self.X_files, self.y_files, self.water_vols, self.in_vols):
+        for vol_f, label_f, water_f, fat_f, in_f in zip(self.X_files, self.y_files, self.water_vols, self.fat_vols, self.in_vols):
         # for vol_f, label_f, water_f in zip(self.X_files, self.y_files, self.water_vols):
         # for vol_f, label_f in zip(self.X_files, self.y_files):
             img, label = nb.load(vol_f), nb.load(label_f)
             water = nb.load(water_f)
-            # fat = nb.load(fat_f)
+            fat = nb.load(fat_f)
             inv = nb.load(in_f)
 
             img_data = np.array(img.get_fdata())
             label_data = np.array(label.get_fdata())
             water_data = np.array(water.get_fdata())
-            # fat_data = np.array(fat.get_fdata())
+            fat_data = np.array(fat.get_fdata())
             in_data = np.array(inv.get_fdata())
 
             # Transforming to Axial Manually.
@@ -113,10 +113,10 @@ class MRIDataset(data.Dataset):
             img_data = np.rollaxis(img_data, self.to_axis, 0)
             label_data = np.rollaxis(label_data, self.to_axis, 0)
             water_data = np.rollaxis(water_data, self.to_axis, 0)
-            # fat_data = np.rollaxis(fat_data, self.to_axis, 0)
+            fat_data = np.rollaxis(fat_data, self.to_axis, 0)
             in_data = np.rollaxis(in_data, self.to_axis, 0)
 
-            img_data, _, water_data, label_data, in_data = self.remove_black_3channels(img_data, None, water_data, label_data, in_data)
+            img_data, fat_data, water_data, label_data, in_data = self.remove_black_3channels(img_data, fat_data, water_data, label_data, in_data)
             # print(img_data.shape)
             # img_data = np.pad(img_data, ((0,0),(1,1),(0,0)), 'constant', constant_values=0)
             # water_data = np.pad(water_data, ((0,0),(1,1),(0,0)), 'constant', constant_values=0)
@@ -129,20 +129,25 @@ class MRIDataset(data.Dataset):
             label_array.extend(label_data)
             # print(img_data.shape, water_data.shape)
             water_array.extend(water_data)
-            # fat_array.extend(fat_data)
+            fat_array.extend(fat_data)
             in_array.extend(in_data)
             cw_array.extend(cw)
             w_array.extend(w)
             img.uncache()
-            label.uncache(None(water_array, axis=0) if len(water_array) > 1 else water_array[0]
-        # fat_ = np.stack(fat_array, axis=0) if len(fat_array) > 1 else fat_array[0]
+            label.uncache()
+            del cw, w
+
+        X = np.stack(img_array, axis=0) if len(img_array) > 1 else img_array[0]
+        y = np.stack(label_array, axis=0) if len(label_array) > 1 else label_array[0]
+        water_ = np.stack(water_array, axis=0) if len(water_array) > 1 else water_array[0]
+        fat_ = np.stack(fat_array, axis=0) if len(fat_array) > 1 else fat_array[0]
         in_ = np.stack(in_array, axis=0) if len(in_array) > 1 else in_array[0]
         class_weights = np.stack(cw_array, axis=0) if len(cw_array) > 1 else cw_array[0]
         weights = np.array(w_array)
         self.y = y   
         self.X = X 
         self.water = water_
-        # self.fat = fat_
+        self.fat = fat_
         self.inv = in_
         self.cw = class_weights
         self.w = weights
@@ -153,7 +158,10 @@ class MRIDataset(data.Dataset):
         img = self.X[index]
         label = self.y[index]
 
-        if self.water_volsNones not None:
+        if self.water_vols is not None:
+            img = self.addWater(index, img)
+
+        if self.fat_vols is not None:
             img = self.addFat(index, img)
 
         if self.in_vols is not None:
@@ -180,7 +188,7 @@ class MRIDataset(data.Dataset):
                 clean_labels.append(frame)
                 clean_data.append(data[i])
                 clean_water.append(water[i])
-                # clean_fat.append(fat[i])
+                clean_fat.append(fat[i])
                 clean_in.append(inv[i])
         return np.array(clean_data), np.array(clean_fat), np.array(clean_water), np.array(clean_labels), np.array(clean_in)
 
@@ -191,8 +199,6 @@ class MRIDataset(data.Dataset):
                 thickenImages.append(self.thickenTheSlice(i))
             elif self.water_vols is not None and self.fat_vols is not None and self.inv is not None:
                 thickenImages.append(self.addIn(i, self.addFat(i, self.addWater(i))))
-            elif self.water_vols is not None and self.inv is not None:
-                thickenImages.append(self.addIn(i, self.addWater(i)))
             elif self.water_vols is not None and self.fat_vols is not None:
                 thickenImages.append(self.addFat(i, self.addWater(i)))
             elif self.water_vols is not None:
@@ -224,7 +230,7 @@ class MRIDataset(data.Dataset):
         img_p1 = self.X[p1]
         img_p2 = self.X[p2]
         # print(n2, n1, index, p1, p2)
-        img_ts = [img_n2, Noneimg_n1, img, img_p1, img_p2]
+        img_ts = [img_n2, img_n1, img, img_p1, img_p2]
         thickenImg = np.stack(img_ts, axis=0)
         return thickenImg
 
@@ -245,8 +251,7 @@ class MRIDataset(data.Dataset):
         img = img if img is not None else self.X[index] 
         inv = self.inv[index]
         # ft = ft[np.newaxis, :, :] if len(img.shape) == 3 else ft
-        # img = np.stack([img[0],img[1], img[2], inv], axis=0)
-        img = np.stack([img[0],img[1], inv], axis=0)
+        img = np.stack([img[0],img[1], img[2], inv], axis=0)
         return img
 
     def getItem(self, index):
@@ -288,21 +293,21 @@ def train(train_params, common_params, data_params, net_params):
     setting_path = common_params['setting_path']
     train_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume/**.nii.gz"))
     train_w_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume_w/**.nii.gz"))
-    # train_f_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume_f/**.nii.gz"))
+    train_f_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume_f/**.nii.gz"))
     train_in_volumes = sorted(glob.glob(f"{data_params['data_dir']}/train/volume_in/**.nii.gz"))
     train_labels = sorted(glob.glob(f"{data_params['data_dir']}/train/label/**.nii.gz"))
 
     test_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume/**.nii.gz"))
     test_w_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume_w/**.nii.gz"))
-    # test_f_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume_f/**.nii.gz"))
+    test_f_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume_f/**.nii.gz"))
     test_in_volumes = sorted(glob.glob(f"{data_params['data_dir']}/test/volume_in/**.nii.gz"))
     test_labels = sorted(glob.glob(f"{data_params['data_dir']}/test/label/**.nii.gz"))
 
-    ds_train = MRIDataset(train_volumes, train_labels, transforms=transform, thickSlice=None, water_vols=train_w_volumes, fat_vols=None, in_vols = train_in_volumes, orientation='SAG')
+    ds_train = MRIDataset(train_volumes, train_labels, transforms=transform, thickSlice=None, water_vols=train_w_volumes, fat_vols=train_f_volumes, in_vols = train_in_volumes, orientation='AXI')
     train_loader = torch.utils.data.DataLoader(ds_train, batch_size=train_params['train_batch_size'], shuffle=True,
                                                num_workers=4, pin_memory=True)
 
-    ds_test = MRIDataset(test_volumes, test_labels, transforms=None, thickSlice=None, water_vols=test_w_volumes, fat_vols=None, in_vols = test_in_volumes, orientation='SAG')
+    ds_test = MRIDataset(test_volumes, test_labels, transforms=None, thickSlice=None, water_vols=test_w_volumes, fat_vols=test_f_volumes, in_vols = test_in_volumes, orientation='AXI')
     val_loader = torch.utils.data.DataLoader(ds_test, batch_size=train_params['val_batch_size'], shuffle=False,
                                              num_workers=4, pin_memory=True)
 

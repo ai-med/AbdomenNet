@@ -386,7 +386,7 @@ def load_file_paths_3channel(data_dir, label_dir, data_id, volumes_txt_file=None
         volumes_to_use = [name for name in os.listdir(data_dir)]
 
     file_paths = [
-        [os.path.join(data_dir, f'{vol}.nii.gz'), os.path.join(label_dir, f'{vol}.nii.gz'), os.path.join(f'{data_dir}_w', f'{vol}.nii.gz'), os.path.join(f'{data_dir}_f', f'{vol}.nii.gz')]
+        [os.path.join(data_dir, f'{vol}.nii.gz'), os.path.join(label_dir, f'{vol}.nii.gz'), os.path.join(f'{data_dir}_w', f'{vol}.nii.gz'), os.path.join(f'{data_dir}_f', f'{vol}.nii.gz'), os.path.join(f'{data_dir}_in', f'{vol}.nii.gz')]
         for
         vol in volumes_to_use]
 

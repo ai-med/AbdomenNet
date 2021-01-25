@@ -150,6 +150,7 @@ def SITK_N4_normalization(in_input_file, opp_file, output_file, shrink_factor=3,
     low_res_output = corrector.Execute(image, maskImage)
     log_bias_field = corrector.GetLogBiasFieldAsImage(inputImage)
     output = oppImage / sitk.Exp( log_bias_field )
+    output = sitk.Cast(output, sitk.sitkInt16)
     sitk.WriteImage(output, output_file)
     print('done')
     return output_file
@@ -157,12 +158,41 @@ def SITK_N4_normalization(in_input_file, opp_file, output_file, shrink_factor=3,
 def create_if_not(path):
     if not os.path.exists(path):
         os.makedirs(path)
+
+def resize(img, shape=(256, 256, 400), is_label=False):
+    if is_label:
+        order = 0
+    else:
+        order = 3
+    mode='constant'
+    print(img.shape)
+    img = resample_from_to(img, [shape, img.affine], order=order, mode=mode, cval=0)
+    return img
+
+def crop(paths, shape, img=None):
+    s1, e1, s2, e2, s3, e3 = shape
+    for path in paths:
+        img = nb.load(path) if img is None else img
+        img_data= img.get_fdata()
+        data = img_data[s1:e1, s2:e2, s3:e3]
+        img = nb.Nifti1Image(data, img.affine, img.header)
+        save_path = '/'.join(path.split('/')[:-1])
+        vol_id = path.split('/')[-1].split('.')[0]
+        save_volume(img, f'{save_path}/{vol_id}_cropped', np.int16)
         
-def save_volume(img, file_name):
+def save_volume(img, file_name, to_dtype=None):
     save_dir = '/'.join(file_name.split('/')[:-1])
     print("saving directory:", save_dir)
     create_if_not(save_dir)
+    if to_dtype:
+        img = change_dtype(img, to_dtype)
     nb.save(img, f'{file_name}.nii.gz')
+
+def change_dtype(img, dtype=np.int16):
+    data = img.get_fdata()
+    data = data.astype(np.int16)
+    img = nb.Nifti1Image(data, img.affine.copy(), img.header.copy())
+    return img
 
 def get_volume_data(img):
     print(f"Affine:{img.affine}, Image Shape: {img.shape}")
@@ -428,17 +458,6 @@ def intensity_matching(img, histogram_matching_reference_path):
     s_r = np.std(template)
     hist_mapped_volume = (volume - m_i) * s_r / s_i + m_r
     return nb.Nifti1Image(hist_mapped_volume, img.affine, img.header)
-
-def crop(paths, shape):
-    s1, e1, s2, e2, s3, e3 = shape
-    for path in paths:
-        img = nb.load(path)
-        img_data= img.get_fdata()
-        data = img_data[s1:e1, s2:e2, s3:e3]
-        img = nb.Nifti1Image(data, img.affine, img.header)
-        save_path = '/'.join(path.split('/')[:-1])
-        vol_id = path.split('/')[-1].split('.')[0]
-        save_volume(img, f'{save_path}_cropped/{vol_id}')
 
 def estimate_weights_mfb(labels, no_of_class=9):
     class_weights = np.zeros_like(labels)
