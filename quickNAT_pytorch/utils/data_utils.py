@@ -482,7 +482,7 @@ def load_file_paths(data_dir, label_dir, data_id, volumes_txt_file=None):
     print('data id ', data_id)
     if data_id == 'KORA':
         file_paths = [
-            [os.path.join(data_dir, f'{vol}.nii.gz'), os.path.join(data_dir, f'{vol}_w.nii.gz'), os.path.join(label_dir, f'{vol}.nii.gz')]
+            [os.path.join(data_dir, f'{vol}.nii.gz'), os.path.join(label_dir, f'{vol}.nii.gz')]
             for
             vol in volumes_to_use]
     elif data_id == 'NAKO':
@@ -590,3 +590,236 @@ def load_file_paths_eval(data_dir, volumes_txt_file, dir_struct):
     else:
         raise ValueError("Invalid entry, valid options are FS and Linear")
     return file_paths
+
+def estimate_weights_mfb(labels, no_of_class=9):
+    class_weights = np.zeros_like(labels)
+    unique, counts = np.unique(labels, return_counts=True)
+    median_freq = np.median(counts)
+    weights = np.zeros(no_of_class)
+    for i, label in enumerate(unique):
+        class_weights += (median_freq // counts[i]) * np.array(labels == label)
+        weights[int(label)] = median_freq // counts[i]
+
+    grads = np.gradient(labels)
+    edge_weights = (grads[0] ** 2 + grads[1] ** 2) > 0
+    class_weights += 2 * edge_weights
+
+    return class_weights, weights
+
+class MRIDataset(data.Dataset):
+
+    def __init__(self, X_files, y_files, transforms=None, thickSlice=None, water_vols=None, fat_vols=None, in_vols=None, orientation='AXI', is_train=False, fold=False):
+        # if fold:
+        #     self.X = X_files
+        #     self.y = y_files
+        #     self.transforms = transform
+        print(f'+++ Preparing data for {fold} fold +++')
+        self.X_files = X_files
+        self.y_files = y_files
+        self.transforms = transforms
+        self.thickSlice = thickSlice
+        self.water_vols = water_vols
+        self.fat_vols = fat_vols
+        self.in_vols = in_vols
+
+        self.is_train = is_train
+
+        if orientation == 'AXI':
+            self.to_axis = 2
+        elif orientation == 'COR':
+            self.to_axis = 1
+        else:
+            self.to_axis = 0
+
+        # assert(self.thickSlice is None if self.water_vols is not None)
+        # assert(self.water_vols is None if self.thickSlice is not None)
+
+        img_array = list()
+        label_array = list()
+        water_array = list()
+        # fat_array = list()
+        in_array = list()
+        cw_array = list()
+        w_array = list()
+
+        for vol_f, label_f, water_f in zip(self.X_files, self.y_files, self.water_vols):
+        # for vol_f, label_f, water_f in zip(self.X_files, self.y_files, self.water_vols):
+        # for vol_f, label_f in zip(self.X_files, self.y_files):
+            img, label = nb.load(vol_f), nb.load(label_f)
+            water = nb.load(water_f)
+            # fat = nb.load(fat_f)
+            # inv = nb.load(in_f)
+
+            img_data = np.array(img.get_fdata())
+            label_data = np.array(label.get_fdata())
+            water_data = np.array(water.get_fdata())
+            # fat_data = np.array(fat.get_fdata())
+            # in_data = np.array(inv.get_fdata())
+
+            # Transforming to Axial Manually.
+
+            img_data = np.rollaxis(img_data, self.to_axis, 0)
+            label_data = np.rollaxis(label_data, self.to_axis, 0)
+            water_data = np.rollaxis(water_data, self.to_axis, 0)
+            # fat_data = np.rollaxis(fat_data, self.to_axis, 0)
+            # in_data = np.rollaxis(in_data, self.to_axis, 0)
+
+            img_data, _, water_data, label_data, _ = self.remove_black_3channels(img_data, None, water_data, label_data, None)
+            # print(img_data.shape)
+            # img_data = np.pad(img_data, ((0,0),(1,1),(0,0)), 'constant', constant_values=0)
+            # water_data = np.pad(water_data, ((0,0),(1,1),(0,0)), 'constant', constant_values=0)
+            # label_data = np.pad(label_data, ((0,0),(1,1),(0,0)), 'constant', constant_values=0)
+
+            # cw, _ = estimate_weights_mfb(label_data)
+            # w = estimate_weights_per_slice(label_data)
+
+            img_array.extend(img_data)
+            label_array.extend(label_data)
+            # print(img_data.shape, water_data.shape)
+            water_array.extend(water_data)
+            # fat_array.extend(fat_data)
+            # in_array.extend(in_data)
+            # cw_array.extend(cw)
+            # w_array.extend(w)
+            img.uncache()
+            label.uncache()
+            water.uncache()
+            # del cw, w
+
+        X = np.stack(img_array, axis=0) if len(img_array) > 1 else img_array[0]
+        y = np.stack(label_array, axis=0) if len(label_array) > 1 else label_array[0]
+        # indices, az, bz = np.where(y==8)
+        # self.gb_min = min(bz)
+        # self.gb_max = max(bz)
+        water_ = np.stack(water_array, axis=0) if len(water_array) > 1 else water_array[0]
+        # fat_ = np.stack(fat_array, axis=0) if len(fat_array) > 1 else fat_array[0]
+        # in_ = np.stack(in_array, axis=0) if len(in_array) > 1 else in_array[0]
+        # class_weights = np.stack(cw_array, axis=0) if len(cw_array) > 1 else cw_array[0]
+        # weights = np.array(w_array)pp5_axi_KORA_mfb_all
+        self.y = y   
+        self.X = X
+        self.water = water_
+        # self.fat = fat_
+        # self.inv = in_
+        self.cw, _ = estimate_weights_mfb(self.y)
+        # self.w = weights
+
+        print(self.X.shape, self.y.shape, self.cw.shape, None)#, self.water.shape)
+        
+    def __getitem__(self, index):
+        # if self.is_train and np.random.rand() < 0.75:
+        #     index = np.random.randint(self.gb_min, high=self.gb_max)
+        img = self.X[index]
+        label = self.y[index]
+
+        if self.water_vols is not None:
+            img = self.addWater(index, img)
+
+        if self.fat_vols is not None:
+            img = self.addFat(index, img)
+
+        if self.in_vols is not None:
+            img = self.addIn(index, img)
+
+        if self.thickSlice is not None:
+            img = self.thickenTheSlice(index, img)
+            
+        if self.transforms is not None:
+            img, label = self.transforms((img, label))
+
+        img = img if len(img.shape) == 3 else img[np.newaxis, :, :]
+        img = torch.from_numpy(img)
+        label = torch.from_numpy(label)
+        class_weights = torch.from_numpy(self.cw[index])
+        # weights = torch.from_numpy(self.w[index])
+        return img.type(torch.FloatTensor), label.type(torch.LongTensor), class_weights.type(torch.FloatTensor)
+
+    def remove_black_3channels(self, data,fat,water, labels, inv):
+        clean_data,clean_fat,clean_water, clean_labels, clean_in = [], [],[],[], []
+        for i, frame in enumerate(labels):
+            unique, counts = np.unique(frame, return_counts=True)
+            if counts[0] / sum(counts) < .99:
+                clean_labels.append(frame)
+                clean_data.append(data[i])
+                clean_water.append(water[i])
+                # clean_fat.append(fat[i])
+                # clean_in.append(inv[i])
+        return np.array(clean_data), np.array(clean_fat), np.array(clean_water), np.array(clean_labels), np.array(clean_in)
+
+    def thickenSlices(self, indices):
+        thickenImages = []
+        for i in indices:
+            if self.thickSlice:
+                thickenImages.append(self.thickenTheSlice(i))
+            elif self.water_vols is not None and self.fat_vols is not None and self.in_vols is not None:
+                thickenImages.append(self.addIn(i, self.addFat(i, self.addWater(i))))
+            elif self.water_vols is not None and self.in_vols is not None:
+                thickenImages.append(self.addIn(i, self.addWater(i)))
+            elif self.water_vols is not None and self.fat_vols is not None:
+                thickenImages.append(self.addFat(i, self.addWater(i)))
+            elif self.water_vols is not None:
+                thickenImages.append(self.addWater(i))
+            elif self.fat_vols is not None:
+                thickenImages.append(self.addFat(i))
+            elif self.in_vols is not None:
+                thickenImages.append(self.addIn(i))
+            else:
+                print('No thickening')
+
+
+        return np.array(thickenImages) # np.stack(thickenImages, axis=0)
+
+    def thickenTheSlice(self, index, img=None):
+        img = img if img is not None else self.X[index] 
+        if index < 2:
+            n1, n2 = index, index
+        else:
+            n1, n2 = index-1, index-2
+        
+        if index >= self.X.shape[0]-3:
+            p1, p2 = index, index
+        else:
+            p1, p2 = index+1, index+2
+
+        img_n1 = self.X[n1]
+        img_n2 = self.X[n2]
+        img_p1 = self.X[p1]
+        img_p2 = self.X[p2]
+        # print(n2, n1, index, p1, p2)
+        img_ts = [img_n2, img_n1, img, img_p1, img_p2]
+        thickenImg = np.stack(img_ts, axis=0)
+        return thickenImg
+
+    def addWater(self, index, img=None):
+        img = img if img is not None else self.X[index] 
+        wtr = self.water[index]
+        img = np.stack([wtr, img], axis=0)
+        return img
+
+    def addFat(self, index, img=None):
+        img = img if img is not None else self.X[index] 
+        ft = self.fat[index]
+        # ft = ft[np.newaxis, :, :] if len(img.shape) == 3 else ft
+        img = np.stack([img[0],img[1], ft], axis=0)
+        return img
+
+    def addIn(self, index, img=None):
+        img = img if img is not None else self.X[index] 
+        inv = self.inv[index]
+        # ft = ft[np.newaxis, :, :] if len(img.shape) == 3 else ft
+        # img = np.stack([img[0],img[1], img[2], inv], axis=0)
+        img = np.stack([img[0],img[1], inv], axis=0)
+        return img
+
+    def getItem(self, index):
+        if (self.thickSlice) or (self.water_vols is not None) or (self.fat_vols is not None) or (self.in_vols is not None):
+            imgs = self.thickenSlices(index)
+        else:
+            imgs = self.X[index]
+
+        labels = self.y[index]
+        imgs = imgs if len(imgs.shape) == 4 else imgs[:, np.newaxis, :, :]
+        return imgs, labels
+
+    def __len__(self):
+        return len(self.y)

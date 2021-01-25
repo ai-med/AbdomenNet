@@ -162,10 +162,6 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
     with torch.no_grad():
         for vol_idx, file_path in enumerate(file_paths):
             if multi_channel:
-                # volume, fat, water, labelmap, class_weights, weights, header = du.load_and_preprocess_3channel(file_path,
-                #                                                                           orientation=orientation,
-                #                                                                           remap_config=remap_config)
-
                 img, label, water, inv = nb.load(file_path[0]), nb.load(file_path[1]), nb.load(file_path[2]), nb.load(file_path[4])
                 volume, labelmap, water, inv, class_weights, weights, header, affine = img.get_fdata(), label.get_fdata(), water.get_fdata(), inv.get_fdata(), None, None, img.header, img.affine
 
@@ -174,70 +170,44 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
                 water = np.rollaxis(water, to_axis, 0)
                 # fat = np.rollaxis(fat, to_axis, 0)
                 inv = np.rollaxis(inv, to_axis, 0)
-
-                volume, _, water, labelmap, inv = remove_black_3channels(volume, None, water, labelmap, inv)
+                template = np.zeros_like(labelmap)
+                volume, _, water, labelmap, inv, S, E = remove_black_3channels(volume, None, water, labelmap, inv, return_indices=True)
 
                 thick_volume = []
                 for w, v, ij in zip(water, volume, inv):
                     thick_volume.append(np.stack([w, v, ij], axis=0))
                 volume = np.array(thick_volume)
 
-                # volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
-                # fat = fat if len(fat.shape) == 4 else fat[:, np.newaxis, :, :]
-                # water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
-                # volume, fat, water, labelmap = torch.tensor(volume).type(torch.FloatTensor),torch.tensor(fat).type(torch.FloatTensor), torch.tensor(water).type(torch.FloatTensor), torch.tensor(labelmap).type(
-                #     torch.LongTensor)
-                # volume, labelmap = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(labelmap).type(torch.LongTensor)
             elif use_2channel:
-                # volume, water, labelmap, class_weights, weights, header = du.load_and_preprocess_2channel(file_path,
-                #                                                                           orientation=orientation,
-                #                                                                           remap_config=remap_config)
                 img, label, water = nb.load(file_path[0]), nb.load(file_path[1]), nb.load(file_path[2])
                 volume, labelmap, water, class_weights, weights, header, affine = img.get_fdata(), label.get_fdata(), water.get_fdata(), None, None, img.header, img.affine
-                
-
-                 #if len(thick_volume.shape) == 4 else thick_volume[:, np.newaxis, :, :]
-                # fat = fat if len(fat.shape) == 4 else fat[:, np.newaxis, :, :]
 
                 volume = np.rollaxis(volume, to_axis, 0)
                 labelmap = np.rollaxis(labelmap, to_axis, 0)
                 water = np.rollaxis(water, to_axis, 0)
+                template = np.zeros_like(labelmap)
+                volume, _, water, labelmap, _, S, E = remove_black_3channels(volume, None, water, labelmap, None, return_indices=True)
 
-                volume, _, water, labelmap = remove_black_3channels(volume, None, water, labelmap)
-                # volume = np.pad(volume, ((0,0),(1,1),(0,0)), 'constant', constant_values=0)
-                # water = np.pad(water, ((0,0),(1,1),(0,0)), 'constant', constant_values=0)
-                # labelmap = np.pad(labelmap, ((0,0),(1,1),(0,0)), 'constant', constant_values=0)
                 print(volume.shape, water.shape)
-
                 thick_volume = []
                 for v, w in zip(volume, water):
                     thick_volume.append(np.stack([w, v], axis=0))
                 volume = np.array(thick_volume)
-                # water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
-                # volume, labelmap = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(labelmap).type(torch.LongTensor)
             else:
-                # volume, labelmap, class_weights, weights, header = du.load_and_preprocess(file_path,
-                #                                                                       orientation=orientation,
-                #                                                                       remap_config=remap_config)
-                print(file_path)
                 img, label = nb.load(file_path[0]), nb.load(file_path[1])
                 volume, labelmap, class_weights, weights, header, affine = img.get_fdata(), label.get_fdata(), None, None, img.header, img.affine
                 volume = np.rollaxis(volume, to_axis, 0)
                 labelmap = np.rollaxis(labelmap, to_axis, 0)
-
+                template = np.zeros_like(labelmap)
+                volume, _, _, labelmap, _, S, E = remove_black_3channels(volume,None, None, labelmap, None, return_indices=True)
+                print(volume.shape, labelmap.shape)
             volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
-            # volume, labelmap = volume.type(torch.FloatTensor), labelmap.type(torch.LongTensor)
             volume, labelmap = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(labelmap).type(torch.LongTensor)
 
             volume_prediction = []
             for i in range(0, len(volume), batch_size):
-                if multi_channel:
+                if multi_channel or use_2channel:
                     batch_x, batch_y = volume[i: i + batch_size], labelmap[i:i + batch_size]
-                    # batch_x, batch_y = torch.cat((volume[i: i + batch_size],fat[i: i + batch_size],water[i: i + batch_size]),dim=1), labelmap[i:i + batch_size]
-                elif use_2channel:
-                    batch_x, batch_y = volume[i: i + batch_size], labelmap[i:i + batch_size]
-                    # batch_x, batch_y = torch.cat(
-                    #     (volume[i: i + batch_size], water[i: i + batch_size]), dim=1), labelmap[i:i + batch_size]
                 elif thick_ch:
                     batch_y = labelmap[i:i + batch_size]
                     batch_x = []
@@ -272,41 +242,17 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
                                                     mode=mode)
 
             volume_prediction = (volume_prediction.cpu().numpy()).astype('int16')
-            volume = (volume.cpu().numpy())
-
-            # before saving, need to rotate back to original orientation.
-            # coronal <-> axial, sagittal always stays the same
-            # if orientation == 'COR':
-            #     new_orientation = 'AXI'
-            # elif orientation == 'AXI':
-            #     new_orientation = 'COR'
-            # else:
-            #     new_orientation = 'SAG'
-            #
-            # print(new_orientation)
-            # volume_prediction = rotate_orientation(volume_prediction, new_orientation)
+           
             print("evaluator here")
-            # reverse remap labels, to be able to compare output to freesurfer GT
-            # volume_prediction = reverse_remap_labels(volume_prediction, remap_config)
 
-            # Copy header affine
-            # if data_id == 'MALC_parcel':
-            #     Mat = header.get_affine()
-            # else:
-            #     Mat = np.array([
-            #         header['srow_x'],
-            #         header['srow_y'],
-            #         header['srow_z'],
-            #         [0, 0, 0, 1]
-            #     ])
-            # Apply original image affine to prediction volume
             header.set_data_dtype('int16')
             volume_prediction = np.squeeze(volume_prediction)
-            volume = np.squeeze(volume[:,0,:,:])
+
+            template[S:E] = volume_prediction
+            volume_prediction = np.rollaxis(template, 0, to_axis+1)
+
             nifti_img = nib.Nifti1Image(volume_prediction, affine, header=header)
-            volume = nib.Nifti1Image(volume, affine, header=header)
-            nib.save(nifti_img, os.path.join(prediction_path, volumes_to_use[vol_idx] + str('.nii.gz')))
-            nib.save(volume, os.path.join(prediction_path, volumes_to_use[vol_idx] + str('_volume.nii.gz')))
+            nib.save(nifti_img, os.path.join(prediction_path, volumes_to_use[vol_idx] + str('_new.nii.gz')))
             if logWriter:
                 logWriter.plot_dice_score('val', 'eval_dice_score', volume_dice_score, volumes_to_use[vol_idx],
                                           np.arange(0, num_classes), num_classes)
@@ -338,35 +284,14 @@ def _segment_vol(file_path, model, orientation, batch_size, cuda_available, devi
         "SAG": 0
     }
     if multi_channel:
-        # volume, fat, water, label, class_weights, weights, header = du.load_and_preprocess_3channel(file_path,
-        #                                                                                                orientation=orientation,
-        #                                                                                                remap_config=remap_config)
-        # volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
-        # fat = fat if len(fat.shape) == 4 else fat[:, np.newaxis, :, :]
-        # water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
-        # volume, fat, water = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(fat).type(
-        #     torch.FloatTensor), torch.tensor(water).type(torch.FloatTensor)
-        img, label, water, inv = nb.load(file_path[0]), nb.load(file_path[1]), nb.load(file_path[2]), nb.load(file_path[4])
-        volume, labelmap, water, inv, class_weights, weights, header, affine = img.get_fdata(), label.get_fdata(), water.get_fdata(), inv.get_fdata(), None, None, img.header, img.affine
-        
-
-        volume = np.rollaxis(volume, to_axis_dict[orientation], 0)
-        label = np.rollaxis(labelmap, to_axis_dict[orientation], 0)
-        water = np.rollaxis(water, to_axis_dict[orientation], 0)
-        inv = np.rollaxis(inv, to_axis_dict[orientation], 0)
-
-        # S, C, A = label.shape
-        # final_full_pred = torch.tensor(np.zeros((S, 9, C, A)))
-        # volume, _, water, _, inv, start, end = remove_black_3channels(volume, None, water, label, inv, return_points=True)
-
-        thick_volume = []
-        for w, v, ij in zip(water, volume, inv):
-            thick_volume.append(np.stack([w, v, ij], axis=0))
-
-        volume = np.array(thick_volume)
-
-        volume = torch.tensor(volume).type(torch.FloatTensor)
-
+        volume, fat, water, label, class_weights, weights, header = du.load_and_preprocess_3channel(file_path,
+                                                                                                       orientation=orientation,
+                                                                                                       remap_config=remap_config)
+        volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
+        fat = fat if len(fat.shape) == 4 else fat[:, np.newaxis, :, :]
+        water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
+        volume, fat, water = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(fat).type(
+            torch.FloatTensor), torch.tensor(water).type(torch.FloatTensor)
     elif use_2channel:
         # volume, water, label, class_weights, weights, header = du.load_and_preprocess_2channel(file_path,
         #                                                                                             orientation=orientation,
@@ -375,7 +300,7 @@ def _segment_vol(file_path, model, orientation, batch_size, cuda_available, devi
         # # fat = fat if len(fat.shape) == 4 else fat[:, np.newaxis, :, :]
         # water = water if len(water.shape) == 4 else water[:, np.newaxis, :, :]
 
-        img, label, water = nb.load(file_path[0]), nb.load(file_path[1]), nb.load(file_path[2])
+        img, label, water = nb.load(file_path[0]), nb.load(file_path[1]), nb.load(file_path[4])
         volume, labelmap, water, class_weights, weights, header, affine = img.get_fdata(), label.get_fdata(), water.get_fdata(), None, None, img.header, img.affine
         
 
@@ -393,8 +318,13 @@ def _segment_vol(file_path, model, orientation, batch_size, cuda_available, devi
 
         volume = torch.tensor(volume).type(torch.FloatTensor) #, torch.tensor(labelmap).type(torch.LongTensor)
     else:
-        volume, label, header = du.load_and_preprocess_eval(file_path,
-                                                        orientation=orientation)
+        img, labelmap = nb.load(file_path[0]), nb.load(file_path[1])
+        # volume, label, header = du.load_and_preprocess_eval(file_path,
+        #                                                 orientation=orientation)
+        volume, labelmap = img.get_fdata(), labelmap.get_fdata()
+
+        volume = np.rollaxis(volume, to_axis_dict[orientation], 0)
+        label = np.rollaxis(labelmap, to_axis_dict[orientation], 0)
 
     volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
     volume = torch.tensor(volume).type(torch.FloatTensor)
@@ -402,9 +332,8 @@ def _segment_vol(file_path, model, orientation, batch_size, cuda_available, devi
     volume_pred = []
     for i in range(0, len(volume), batch_size):
         if multi_channel:
-            # batch_x = torch.cat((volume[i: i + batch_size], fat[i: i + batch_size], water[i: i + batch_size]),
-            #                              dim=1)
-            batch_x = volume[i: i + batch_size]
+            batch_x = torch.cat((volume[i: i + batch_size], fat[i: i + batch_size], water[i: i + batch_size]),
+                                         dim=1)
         elif use_2channel:
             batch_x = volume[i: i + batch_size] #torch.cat((volume[i: i + batch_size], water[i: i + batch_size]), dim=1)
         else:
@@ -418,9 +347,6 @@ def _segment_vol(file_path, model, orientation, batch_size, cuda_available, devi
         volume_pred.append(out)
 
     volume_pred = torch.cat(volume_pred)
-    # ep = volume_pred.shape[0]
-    # final_full_pred[start:start+ep] = volume_pred
-    # volume_pred = final_full_pred
     _, volume_prediction = torch.max(volume_pred, dim=1)
 
     volume_prediction = (volume_prediction.cpu().numpy()).astype('float32')
@@ -468,7 +394,7 @@ def _segment_vol_unc(file_path, model, orientation, batch_size, mc_samples, cuda
             volume_pred = volume_pred.permute((2, 1, 3, 0))
         elif orientation == "AXI":
             volume_prediction = volume_prediction.transpose((2, 0, 1))
-            volume_pred = volume_pred.permute((0, 1, 3, 2))
+            volume_pred = volume_pred.permute((3, 1, 0, 2))
 
         mc_pred_list.append(volume_prediction)
         if j == 0:

@@ -33,7 +33,7 @@ def read_ras(file_path, file_type=None, is_label=False):
         return img_ras
     
 def file_reader(file_path, file_type=None):
-    print('Reading Files.....')
+    # print('Reading Files.....')
     header_mat = np.empty_like((4, 4))
     if file_type == None:
         file_type = file_path.split('.')[-1]
@@ -81,15 +81,15 @@ def fetch_class_labels_from_filemap(labelmap_path, file_labels=FILE_TO_LABEL_MAP
     other_file = ['COMB']
     label_idx, label = None, None
     for lidx, file_label_key in enumerate(file_labels.keys()):
-        _ = [print(label.replace(" ", "").upper(), labelmap_path.replace(" ", "").upper()) for label in file_labels[file_label_key]]
-        print([label.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for label in file_labels[file_label_key]], np.any([label.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for label in file_labels[file_label_key]]))
+        # _ = [print(label.replace(" ", "").upper(), labelmap_path.replace(" ", "").upper()) for label in file_labels[file_label_key]]
+        # print([label.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for label in file_labels[file_label_key]], np.any([label.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for label in file_labels[file_label_key]]))
         ifPresent = np.any([label.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for label in file_labels[file_label_key]])
         if ifPresent:
             label_idx, label = lidx, file_label_key
             break
     else:
-        _ = [print(other.replace(" ", "").upper(), labelmap_path.replace(" ", "").upper()) for other in other_file]
-        print(np.any([other.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for other in other_file]))
+        # _ = [print(other.replace(" ", "").upper(), labelmap_path.replace(" ", "").upper()) for other in other_file]
+        # print(np.any([other.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for other in other_file]))
         ifExceptedFilePresent = np.any([other.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for other in other_file])
         if not ifExceptedFilePresent:
 #             raise Exception(f'No Matched Label Found for {labelmap_path}!')
@@ -103,9 +103,9 @@ def rescale(in_image, vol_id, original_filename):
     in_image_data = in_image.get_fdata()
     o_min = np.min(in_image_data)
     o_max = np.max(in_image_data)
-    print(o_min)
+    # print(o_min)
     if o_min<0:
-        print('neagtive value detected')
+        print(f'{o_min}: neagtive value detected')
         in_image_data_scaled = in_image_data + np.abs(o_min)+10
     else:
         in_image_data_scaled = in_image_data + 10
@@ -152,7 +152,7 @@ def SITK_N4_normalization(in_input_file, opp_file, output_file, shrink_factor=3,
     output = oppImage / sitk.Exp( log_bias_field )
     output = sitk.Cast(output, sitk.sitkInt16)
     sitk.WriteImage(output, output_file)
-    print('done')
+    print(f'SITK-done: {output_file}')
     return output_file
 
 def create_if_not(path):
@@ -165,7 +165,7 @@ def resize(img, shape=(256, 256, 400), is_label=False):
     else:
         order = 3
     mode='constant'
-    print(img.shape)
+    # print(img.shape)
     img = resample_from_to(img, [shape, img.affine], order=order, mode=mode, cval=0)
     return img
 
@@ -182,7 +182,7 @@ def crop(paths, shape, img=None):
         
 def save_volume(img, file_name, to_dtype=None):
     save_dir = '/'.join(file_name.split('/')[:-1])
-    print("saving directory:", save_dir)
+    print("saving:", file_name)
     create_if_not(save_dir)
     if to_dtype:
         img = change_dtype(img, to_dtype)
@@ -195,7 +195,7 @@ def change_dtype(img, dtype=np.int16):
     return img
 
 def get_volume_data(img):
-    print(f"Affine:{img.affine}, Image Shape: {img.shape}")
+    # print(f"Affine:{img.affine}, Image Shape: {img.shape}")
     return img.get_fdata()
     
 def apply_bias_field(opp_img, bias_field_img, opp_file, n4_dict, vol_id):
@@ -233,7 +233,7 @@ def multi_vol_stitching(images, is_label=False, sampling=True):
     if len(images) == 1:
         if sampling:
             img_0 = resample_to_output(img_0, TARGET_RESOLUTION, order=order, mode=mode, cval=0.0)
-        print(img_0.affine)
+        # print(img_0.affine)
         return img_0
     
     for idx, img_1 in enumerate(images_sorted[1:]):
@@ -247,7 +247,7 @@ def multi_vol_stitching(images, is_label=False, sampling=True):
     
     if sampling:
         img_0 = resample_to_output(img_0, TARGET_RESOLUTION, order=order, mode=mode, cval=0.0)
-    print(img_0.affine)
+    # print(img_0.affine)
     return img_0
 
 def vol_stitching(im_0, im_1):
@@ -301,21 +301,21 @@ def get_points(segm, img):
         return 0,0,0,segm.shape[0], segm.shape[1],segm.shape[2]
     img_dim_v = img.shape
     segm_dim_v = segm.shape
-    print('im dim v: ', img_dim_v)
-    print('segm dim v: ', segm_dim_v)
+    # print('im dim v: ', img_dim_v)
+    # print('segm dim v: ', segm_dim_v)
 
     img_h = img.header
     segm_h = segm.header
     im_spacing = abs(img_h['pixdim'][1:4])
     segm_spacing = abs(segm_h['pixdim'][1:4])
-    print('im spacing: ', im_spacing)
-    print('segm spacing: ', segm_spacing)
+    # print('im spacing: ', im_spacing)
+    # print('segm spacing: ', segm_spacing)
 
     im_dim_w = img_dim_v * im_spacing
     segm_dim_w = segm_dim_v * segm_spacing
 
-    print('im dim w: ', im_dim_w)
-    print('segm dim w: ', segm_dim_w)
+    # print('im dim w: ', im_dim_w)
+    # print('segm dim w: ', segm_dim_w)
 
     # correction of the wrong information in header file
     im_offx = abs(img_h['qoffset_x'])
@@ -334,28 +334,28 @@ def get_points(segm, img):
     segm_start = segm_off
     segm_end = np.array([segm_start[0]-segm_dim_w[0], segm_start[1]-segm_dim_w[1], segm_start[2]+segm_dim_w[2]])
 
-    print('im off: ', im_offset)
-    print('segm off: ', segm_off)
+    # print('im off: ', im_offset)
+    # print('segm off: ', segm_off)
 
-    print('im start: ', im_start)
-    print('im end: ', im_end)
-    print('segm start: ', segm_start)
-    print('segm end: ', segm_end)
+    # print('im start: ', im_start)
+    # print('im end: ', im_end)
+    # print('segm start: ', segm_start)
+    # print('segm end: ', segm_end)
 
     start_diff_w = abs(im_start - segm_start)
     end_diff_w = abs(im_end - segm_end)
-    print('start diff w: ', start_diff_w)
+    # print('start diff w: ', start_diff_w)
 
-    print('end_diff w ', end_diff_w)
+    # print('end_diff w ', end_diff_w)
 
     start_diff_v = np.round(start_diff_w / segm_spacing).astype(int)
-    print('start diff v: ', start_diff_v)
+    # print('start diff v: ', start_diff_v)
 
     end_diff_v = np.round(end_diff_w / segm_spacing).astype(int)
-    print('end diff v: ', end_diff_v)
+    # print('end diff v: ', end_diff_v)
 
     segm_end_v = img_dim_v - end_diff_v
-    print('segm end v: ', segm_end_v)
+    # print('segm end v: ', segm_end_v)
 
     segm_end_x = segm_end_v[0]
     segm_end_y = segm_end_v[1]
@@ -363,7 +363,7 @@ def get_points(segm, img):
     segm_start_x = segm_end_x - segm_dim_v[0]
     segm_start_y = segm_end_y - segm_dim_v[1]
     segm_start_z = segm_end_z - segm_dim_v[2]
-    print('segm start v: ', segm_start_x, segm_start_y, segm_start_z)
+    # print('segm start v: ', segm_start_x, segm_start_y, segm_start_z)
     
     return segm_start_x, segm_start_y, segm_start_z, segm_end_x, segm_end_y, segm_end_z
 

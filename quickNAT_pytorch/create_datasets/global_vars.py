@@ -10,7 +10,7 @@ DEFAULT_VIEW = ['Saggital', 'Coronal', 'Axial']
 DEFAULT_REFERENCE_VIEW = 'Sagittal'
 OPTIMIZATION = 'N4'  # Intensity, Min-Max, Fat-Water-Swap
 IS_CROPPING = True
-DEFAULT_OUTPUT_PATH = '/mnt/nas/Abhijit/Jyotirmay/abdominal_segmentation/temp3'
+DEFAULT_OUTPUT_PATH = '/mnt/nas/Abhijit/Jyotirmay/abdominal_segmentation/temp2'
 DEFAULT_LINSPACE = 30
 
 
@@ -39,7 +39,7 @@ elif DATASET == 'NAKO':
     SAMPLING = True
 elif DATASET == 'UKB':
     data_dir = "/mnt/nas/Data_WholeBody/UKBiobank/body/body_nifti"
-    # data_dir = "/mnt/nas/Abhijit/Jyotirmay/abdominal_segmentation/ukb_niftis"
+    # data_dir = "/mnt/nas/Users/Sebastian/UKB_nifty/"
     SAMPLING = True
 else:
     raise Exception('NO DATA DIRECTORY FOUND!!!')
