@@ -10,12 +10,9 @@ from torch.optim import lr_scheduler
 import utils.common_utils as common_utils
 from utils.log_utils import LogWriter
 
-import wandb
-
 CHECKPOINT_DIR = 'checkpoints'
 ARCHITECTURE_DIR = 'architecture'
 CHECKPOINT_EXTENSION = 'pth.tar'
-
 
 class Solver(object):
 
@@ -40,7 +37,7 @@ class Solver(object):
 
         self.device = device
         self.model = model
-        self.swa_model = torch.optim.swa_utils.AveragedModel(self.model)
+        self.swa_model = torch.optim.swa_utils.AveragedModel(self.model) #
         self.model_name = model_name
         self.labels = labels
         self.num_epochs = num_epochs
@@ -51,7 +48,7 @@ class Solver(object):
         self.optim = optim(model.parameters(), **optim_args)
         # self.scheduler = lr_scheduler.StepLR(self.optim, step_size=lr_scheduler_step_size,
         #                                      gamma=lr_scheduler_gamma)
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optim, T_max=300)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optim, T_max=100)
         self.swa_start = -1 #int(np.round(self.num_epochs*0.75))
         print(self.swa_start)
         self.swa_scheduler = torch.optim.swa_utils.SWALR(self.optim, swa_lr=0.05)
@@ -65,7 +62,6 @@ class Solver(object):
         
         self.log_nth = log_nth
         self.logWriter = LogWriter(num_class, log_dir, exp_name, use_last_checkpoint, labels)
-        # self.wandb = wandb
 
         self.use_last_checkpoint = use_last_checkpoint
 
@@ -78,7 +74,8 @@ class Solver(object):
         if use_last_checkpoint:
             self.load_checkpoint()
 
-    # TODO:Need to correct the CM and dice score calculation.
+        print(self.best_ds_mean, self.best_ds_mean_epoch, self.start_epoch)
+
     def train(self, train_loader, val_loader):
         """
         Train a given model with the provided data.
@@ -88,7 +85,7 @@ class Solver(object):
         - val_loader: val data in torch.utils.data.DataLoader
         """
         model, optim, scheduler = self.model, self.optim, self.scheduler
-        # self.wandb.watch(model)
+
         swa_model, swa_scheduler, swa_start = self.swa_model, self.swa_scheduler, self.swa_start
         dataloaders = {
             'train': train_loader,
@@ -111,6 +108,7 @@ class Solver(object):
                 y_list = []
                 if phase == 'train':
                     model.train()
+                    # scheduler.step()
                 else:
                     model.eval()
                 for i_batch, sample_batched in enumerate(dataloaders[phase]):
@@ -133,12 +131,11 @@ class Solver(object):
                         optim.zero_grad()
                         loss.backward()
                         optim.step()
-                        #scheduler.step(epoch)
                         if epoch > swa_start:
                           swa_model.update_parameters(model)
                           swa_scheduler.step()
                         else:
-                          scheduler.step()
+                            scheduler.step()
                         if i_batch % self.log_nth == 0:
                             self.logWriter.loss_per_iter(loss.item(), i_batch, current_iteration)
                         current_iteration += 1
@@ -165,7 +162,8 @@ class Solver(object):
                     val_imgs, val_labels = dataloaders[phase].dataset.getItem(index)
                     predicted_imgs = model.predict(val_imgs, self.device)
                     if val_imgs.shape[1] > 1:
-                        val_imgs = val_imgs[:, 2, :, :]
+                        mid_slice = val_imgs.shape[1]//2
+                        val_imgs = val_imgs[:, mid_slice, :, :]
                     self.logWriter.image_per_epoch(val_imgs, predicted_imgs, val_labels, phase, epoch)
                     self.logWriter.cm_per_epoch(phase, out_arr, y_arr, epoch)
 
@@ -175,11 +173,15 @@ class Solver(object):
                             self.best_ds_mean = ds_mean
                             self.best_ds_mean_epoch = epoch
 
+                        print(out_arr.shape, epoch, ds_mean, self.best_ds_mean, self.best_ds_mean_epoch)
+
             print("==== Epoch [" + str(epoch) + " / " + str(self.num_epochs) + "] DONE ====")
             self.save_checkpoint({
                 'epoch': epoch + 1,
                 'start_iteration': current_iteration + 1,
                 'arch': self.model_name,
+                'best_ds_mean': self.best_ds_mean,
+                'best_ds_mean_epoch': self.best_ds_mean_epoch,
                 'state_dict': model.state_dict(),
                 'optimizer': optim.state_dict(),
                 'scheduler': scheduler.state_dict()
@@ -188,26 +190,27 @@ class Solver(object):
 
         torch.optim.swa_utils.update_bn(dataloaders['train'], swa_model)
         self.model = swa_model
+        # self.model = model
         print('FINISH.')
         self.logWriter.close()
 
-    def save_architectural_files(self, arch_file_path):
-        if arch_file_path is not None:
+    def save_architectural_files(self, arch_file_paths):
+        if arch_file_paths is not None:
+            arch_file_path, setting_path = arch_file_paths
             destination = os.path.join(self.exp_dir_path, ARCHITECTURE_DIR)
             common_utils.create_if_not(destination)
             arch_base = "/".join(arch_file_path.split('/')[:-1])
-            print(arch_base, destination+'/model.py')
+            print(arch_file_path, arch_base, setting_path, destination+'/model.py')
             shutil.copy(arch_file_path, destination+'/model.py')
             shutil.copy(f'{arch_base}/run.py', f'{destination}/run.py')
             shutil.copy(f'{arch_base}/solver.py', f'{destination}/solver.py')
             shutil.copy(f'{arch_base}/utils/evaluator.py', f'{destination}/utils-evaluator.py')
             shutil.copy(f'{arch_base}/nn_common_modules/losses.py', f'{destination}/nn_common_modules-losses.py')
             shutil.copy(f'{arch_base}/nn_common_modules/modules.py', f'{destination}/nn_common_modules-modules.py')
-            shutil.copy(f'{arch_base}/settings_merged_jj.ini', f'{destination}/settings_merged_jj.ini')
+            shutil.copy(f'{setting_path}', f'{destination}/settings.ini')
         else:
             print('No Architectural file!!!')
             
-
     def save_best_model(self, path):
         """
         Save model with its parameters to the given path. Conventionally the
@@ -217,6 +220,7 @@ class Solver(object):
         """
         print('Saving model... %s' % path)
         print('Best Model at Epoch: ' + str(self.best_ds_mean_epoch))
+        print('Best Model with val Dice Score: ' + str(self.best_ds_mean))
         self.load_checkpoint(self.best_ds_mean_epoch)
 
         torch.save(self.model, path)
@@ -232,6 +236,7 @@ class Solver(object):
         else:
             all_files_path = os.path.join(self.exp_dir_path, CHECKPOINT_DIR, '*.' + CHECKPOINT_EXTENSION)
             list_of_files = glob.glob(all_files_path)
+            
             if len(list_of_files) > 0:
                 checkpoint_path = max(list_of_files, key=os.path.getctime)
                 self._load_checkpoint_file(checkpoint_path)
@@ -243,6 +248,9 @@ class Solver(object):
         self.logWriter.log("=> loading checkpoint '{}'".format(file_path))
         checkpoint = torch.load(file_path)
         self.start_epoch = checkpoint['epoch']
+        if 'best_ds_mean' in checkpoint.keys():
+            self.best_ds_mean = checkpoint['best_ds_mean']
+            self.best_ds_mean_epoch = checkpoint['best_ds_mean_epoch']
         self.start_iteration = checkpoint['start_iteration']
         self.model.load_state_dict(checkpoint['state_dict'])
         self.optim.load_state_dict(checkpoint['optimizer'])
