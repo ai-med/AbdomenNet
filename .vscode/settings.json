@@ -1,8 +1,0 @@
-{
-    "python.pythonPath": "/home/jyotirmay/miniconda3/envs/remotenv/bin/python",
-    "python.linting.enabled": false,
-    "sync-rsync.autoShowOutput": true,
-    "sync-rsync.local": "home/abhijit/Jyotirmay/abdominal_segmentation",
-    "sync-rsync.remote": "jyotirmay@138.246.223.40:home/jyotirmay/remote_projects/abdominal_segmentation",
-    "sync-rsync.onSaveIndividual": true
-}
