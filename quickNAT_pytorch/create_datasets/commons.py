@@ -33,7 +33,7 @@ def read_ras(file_path, file_type=None, is_label=False):
         return img_ras
     
 def file_reader(file_path, file_type=None):
-    print('Reading Files.....')
+    # print('Reading Files.....')
     header_mat = np.empty_like((4, 4))
     if file_type == None:
         file_type = file_path.split('.')[-1]
@@ -81,15 +81,11 @@ def fetch_class_labels_from_filemap(labelmap_path, file_labels=FILE_TO_LABEL_MAP
     other_file = ['COMB']
     label_idx, label = None, None
     for lidx, file_label_key in enumerate(file_labels.keys()):
-        _ = [print(label.replace(" ", "").upper(), labelmap_path.replace(" ", "").upper()) for label in file_labels[file_label_key]]
-        print([label.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for label in file_labels[file_label_key]], np.any([label.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for label in file_labels[file_label_key]]))
         ifPresent = np.any([label.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for label in file_labels[file_label_key]])
         if ifPresent:
             label_idx, label = lidx, file_label_key
             break
     else:
-        _ = [print(other.replace(" ", "").upper(), labelmap_path.replace(" ", "").upper()) for other in other_file]
-        print(np.any([other.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for other in other_file]))
         ifExceptedFilePresent = np.any([other.replace(" ", "").upper() in labelmap_path.replace(" ", "").upper() for other in other_file])
         if not ifExceptedFilePresent:
 #             raise Exception(f'No Matched Label Found for {labelmap_path}!')
@@ -103,9 +99,8 @@ def rescale(in_image, vol_id, original_filename):
     in_image_data = in_image.get_fdata()
     o_min = np.min(in_image_data)
     o_max = np.max(in_image_data)
-    print(o_min)
     if o_min<0:
-        print('neagtive value detected')
+        print(f'{o_min}: neagtive value detected')
         in_image_data_scaled = in_image_data + np.abs(o_min)+10
     else:
         in_image_data_scaled = in_image_data + 10
@@ -127,7 +122,7 @@ def rescale(in_image, vol_id, original_filename):
 
 def SITK_N4_normalization(in_input_file, opp_file, output_file, shrink_factor=3,
                           mask=None, iteration=500, fittingLevel=4, tolerance=1e-03,
-                          spline_param=200):
+                          spline_param=200, do_casting=True):
     inputImage = sitk.ReadImage(in_input_file, sitk.sitkFloat32)
     oppImage = sitk.ReadImage(opp_file, sitk.sitkFloat32)
     image = inputImage
@@ -150,22 +145,53 @@ def SITK_N4_normalization(in_input_file, opp_file, output_file, shrink_factor=3,
     low_res_output = corrector.Execute(image, maskImage)
     log_bias_field = corrector.GetLogBiasFieldAsImage(inputImage)
     output = oppImage / sitk.Exp( log_bias_field )
+    if do_casting:
+        output = sitk.Cast(output, sitk.sitkInt16)
     sitk.WriteImage(output, output_file)
-    print('done')
+    print(f'SITK-done: {output_file}')
     return output_file
 
 def create_if_not(path):
     if not os.path.exists(path):
         os.makedirs(path)
+
+def resize(img, shape=(256, 256, 400), is_label=False):
+    if is_label:
+        order = 0
+        mode='nearest'
+    else:
+        order = 3
+        mode='constant'    
         
-def save_volume(img, file_name):
+    img = resample_from_to(img, [shape, img.affine], order=order, mode=mode, cval=0)
+    return img
+
+def crop(paths, shape, img=None):
+    s1, e1, s2, e2, s3, e3 = shape
+    for path in paths:
+        img = nb.load(path) if img is None else img
+        img_data= img.get_fdata()
+        data = img_data[s1:e1, s2:e2, s3:e3]
+        img = nb.Nifti1Image(data, img.affine, img.header)
+        save_path = '/'.join(path.split('/')[:-1])
+        vol_id = path.split('/')[-1].split('.')[0]
+        save_volume(img, f'{save_path}/{vol_id}_cropped', np.int16)
+        
+def save_volume(img, file_name, to_dtype=None):
     save_dir = '/'.join(file_name.split('/')[:-1])
-    print("saving directory:", save_dir)
+    print("saving:", file_name)
     create_if_not(save_dir)
+    if to_dtype:
+        img = change_dtype(img, to_dtype)
     nb.save(img, f'{file_name}.nii.gz')
 
+def change_dtype(img, dtype=np.int16):
+    data = img.get_fdata()
+    data = data.astype(np.int16)
+    img = nb.Nifti1Image(data, img.affine.copy(), img.header.copy())
+    return img
+
 def get_volume_data(img):
-    print(f"Affine:{img.affine}, Image Shape: {img.shape}")
     return img.get_fdata()
     
 def apply_bias_field(opp_img, bias_field_img, opp_file, n4_dict, vol_id):
@@ -181,7 +207,6 @@ def apply_bias_field(opp_img, bias_field_img, opp_file, n4_dict, vol_id):
     current_max = np.max(corrected_img_data)
     downscaled_img_data = (corrected_img_data - current_min) * (orig_max - orig_min)/(current_max - current_min) + orig_min
 
-    
     downscaled_img = nb.Nifti1Image(downscaled_img_data, opp_img.affine.copy(), opp_img.header.copy())
     create_if_not(f'{n4_corrected_data_dir}/vol/{vol_id}')
 
@@ -189,26 +214,32 @@ def apply_bias_field(opp_img, bias_field_img, opp_file, n4_dict, vol_id):
     n4_dict['OPP_CORRECTED'] = f'{n4_corrected_data_dir}/vol/{vol_id}/{new_filename}_n4_corrected.nii.gz'
     return n4_dict
 
-def multi_vol_stitching(images, is_label=False):
-    if len(images) == 1:
-        return images[0]
-    elif len(images) == 0:
+def multi_vol_stitching(images, is_label=False, sampling=True):
+    if len(images) == 0:
         raise Exception("Empty Image List!")
 
     images_sorted = sorted(images, key=lambda im: im.header['qoffset_z'], reverse=True)
     img_0 = images_sorted[0]
 
     mode = 'nearest' if is_label else 'constant'
-    img_0 = resample_to_output(img_0, TARGET_RESOLUTION, order=3, mode=mode, cval=0.0)
-
+    order = 0 if is_label else 3
+    
+    if len(images) == 1:
+        if sampling:
+            img_0 = resample_to_output(img_0, TARGET_RESOLUTION, order=order, mode=mode, cval=0.0)
+        return img_0
+    
     for idx, img_1 in enumerate(images_sorted[1:]):
         print(f'{idx}th img for stitching...')
-        img_1 = resample_to_output(img_1, TARGET_RESOLUTION, order=3, mode=mode, cval=0.0)
         target_affine = img_0.affine.copy()
         target_affine[2, 3] = img_1.affine[2, 3].copy()
         target_shape = img_0.shape[:2] + img_1.shape[2:]
         img_1 = resample_from_to(img_1, [target_shape, target_affine])
         img_0 = vol_stitching(img_0, img_1)
+    
+    if sampling:
+        img_0 = resample_to_output(img_0, TARGET_RESOLUTION, order=order, mode=mode, cval=0.0)
+
     return img_0
 
 def vol_stitching(im_0, im_1):
@@ -262,21 +293,14 @@ def get_points(segm, img):
         return 0,0,0,segm.shape[0], segm.shape[1],segm.shape[2]
     img_dim_v = img.shape
     segm_dim_v = segm.shape
-    print('im dim v: ', img_dim_v)
-    print('segm dim v: ', segm_dim_v)
 
     img_h = img.header
     segm_h = segm.header
     im_spacing = abs(img_h['pixdim'][1:4])
     segm_spacing = abs(segm_h['pixdim'][1:4])
-    print('im spacing: ', im_spacing)
-    print('segm spacing: ', segm_spacing)
 
     im_dim_w = img_dim_v * im_spacing
     segm_dim_w = segm_dim_v * segm_spacing
-
-    print('im dim w: ', im_dim_w)
-    print('segm dim w: ', segm_dim_w)
 
     # correction of the wrong information in header file
     im_offx = abs(img_h['qoffset_x'])
@@ -295,28 +319,14 @@ def get_points(segm, img):
     segm_start = segm_off
     segm_end = np.array([segm_start[0]-segm_dim_w[0], segm_start[1]-segm_dim_w[1], segm_start[2]+segm_dim_w[2]])
 
-    print('im off: ', im_offset)
-    print('segm off: ', segm_off)
-
-    print('im start: ', im_start)
-    print('im end: ', im_end)
-    print('segm start: ', segm_start)
-    print('segm end: ', segm_end)
-
     start_diff_w = abs(im_start - segm_start)
     end_diff_w = abs(im_end - segm_end)
-    print('start diff w: ', start_diff_w)
-
-    print('end_diff w ', end_diff_w)
 
     start_diff_v = np.round(start_diff_w / segm_spacing).astype(int)
-    print('start diff v: ', start_diff_v)
 
     end_diff_v = np.round(end_diff_w / segm_spacing).astype(int)
-    print('end diff v: ', end_diff_v)
 
     segm_end_v = img_dim_v - end_diff_v
-    print('segm end v: ', segm_end_v)
 
     segm_end_x = segm_end_v[0]
     segm_end_y = segm_end_v[1]
@@ -324,8 +334,7 @@ def get_points(segm, img):
     segm_start_x = segm_end_x - segm_dim_v[0]
     segm_start_y = segm_end_y - segm_dim_v[1]
     segm_start_z = segm_end_z - segm_dim_v[2]
-    print('segm start v: ', segm_start_x, segm_start_y, segm_start_z)
-    
+
     return segm_start_x, segm_start_y, segm_start_z, segm_end_x, segm_end_y, segm_end_z
 
 def get_freequent_shape(arr, axis=0):
@@ -351,11 +360,10 @@ def makeit_3d(img):
 def volume_3_view_viewer(vol):
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, tight_layout=True)
     axis = vol.shape
-
+    
     ax1.imshow(vol[axis[0] // 2])
     ax2.imshow(vol[:, axis[1] // 2, :])
     ax3.imshow(vol[:, :, axis[2] // 2])
-
     plt.show()
     
 def visualize_and_save(volid, vol_root=f'{processed_dir}/label_cropped', label_root=f'{processed_dir}/volume_cropped', img_save_path = f'{processed_dir}/merged_imgs'):
@@ -364,10 +372,11 @@ def visualize_and_save(volid, vol_root=f'{processed_dir}/label_cropped', label_r
 
     im = vol.get_fdata()
     x = im.shape[1]//2
-    masked = label.get_fdata()
+    masked = label.get_fdata() if label_root is not None else None
     plt.figure()
     plt.imshow(np.rot90(im[:,x,:]), 'gray', interpolation='none')
-    plt.imshow(np.rot90(masked[:,x,:]), 'jet', interpolation='none', alpha=0.5)
+    if label_root is not None:
+        plt.imshow(np.rot90(masked[:,x,:]), 'jet', interpolation='none', alpha=0.5)
     plt.savefig(f'{img_save_path}/{volid}.png',  dpi=250, quality=95)
     plt.show()
     
@@ -419,17 +428,6 @@ def intensity_matching(img, histogram_matching_reference_path):
     hist_mapped_volume = (volume - m_i) * s_r / s_i + m_r
     return nb.Nifti1Image(hist_mapped_volume, img.affine, img.header)
 
-def crop(paths, shape):
-    s1, e1, s2, e2, s3, e3 = shape
-    for path in paths:
-        img = nb.load(path)
-        img_data= img.get_fdata()
-        data = img_data[s1:e1, s2:e2, s3:e3]
-        img = nb.Nifti1Image(data, img.affine, img.header)
-        save_path = '/'.join(path.split('/')[:-1])
-        vol_id = path.split('/')[-1].split('.')[0]
-        save_volume(img, f'{save_path}_cropped/{vol_id}')
-
 def estimate_weights_mfb(labels, no_of_class=9):
     class_weights = np.zeros_like(labels)
     unique, counts = np.unique(labels, return_counts=True)
@@ -457,38 +455,325 @@ def estimate_weights_per_slice(labels, no_of_class=9):
 
     return np.array(weights_per_slice)
 
-class MRIDataset(data.Dataset):
-    def __init__(self, X_files, y_files, transforms=None):
-        self.X_files = X_files
-        self.y_files = y_files
-        self.transforms = transforms
+def kora_vol_label_fix(vol, label, use_alternate_approach=False):
+    world_shape = np.max(np.array([list(vol.shape), list(label.shape)]), axis=0)
+    final_label = np.zeros(tuple(world_shape))
     
-        img_array = list()
-        label_array = list()
-        for vol_f, label_f in zip(self.X_files, self.y_files):
-            img, label = nb.load(vol_f), nb.load(label_f)
-            img_data = np.array(img.get_fdata())
-            label_data = np.array(label.get_fdata())
-            
-            # Transforming to Axial Manually.
-            img_data = np.rollaxis(img_data, 2, 0)
-            label_data = np.rollaxis(label_data, 2, 0)
-            
-            img_array.extend(img_data)
-            label_array.extend(label_data)
-            img.uncache()
-            label.uncache()
-            
-        X = np.stack(img_array, axis=0) if len(img_array) > 1 else img_array[0]
-        y = np.stack(label_array, axis=0) if len(label_array) > 1 else label_array[0]
-        self.X = X if len(X.shape) == 4 else X[:, np.newaxis, :, :]
-        self.y = y
-        print(self.X.shape, self.y.shape)
-        
-    def __getitem__(self, index):
-        img = torch.from_numpy(self.X[index])
-        label = torch.from_numpy(self.y[index])
-        return img, label
+    label_affine = label.affine
+    vol_affine = vol.affine
+    target_affine = vol_affine
+    target_header = vol.header
 
-    def __len__(self):
-        return len(self.y)
+    sx,sy,sz,ex,ey,ez = np.abs(get_points(label, vol))
+
+    ld = label.get_fdata()
+    if not use_alternate_approach:
+        final_label[0:sx+ex, 0:sy+ey, 0:sz+ez] = ld
+    else:
+        final_label[0:sx+ex, 0:sy+ey, 77:77+76] = ld[:, :, :76]
+        
+    final_label = np.flip(final_label, axis=0)
+    final_label = np.flip(final_label, axis=2)
+    
+    final_label_img = nb.Nifti1Image(final_label, target_affine, target_header)
+    
+    return vol, final_label_img
+
+def kora_label_parts(label_parts, reference_labelmap=None):
+    stitched_label = None
+    mode = 'nearest'
+    order = 0
+    if reference_labelmap is None:
+        label_shape = get_freequent_shape([img.shape for img, _, _ in label_parts])
+        reference_labelmap = [img for img, _, _ in label_parts if list(img.shape) == list(label_shape)][0]
+    else:
+        label_shape = reference_labelmap.shape
+        
+    stitched_label = np.zeros(label_shape)
+    for labelmap_img, lidx, lname in label_parts:
+        print(lidx, lname)
+        labelmap_img = makeit_3d(labelmap_img)
+        labelmap_img = resample_from_to(labelmap_img, [label_shape, reference_labelmap.affine], order=order, mode=mode, cval=0)
+        
+        sx,sy,sz,ex,ey,ez = np.abs(get_points(labelmap_img, reference_labelmap))
+        
+        labelmap = labelmap_img.get_fdata()
+        labelmap = np.multiply(lidx, labelmap)
+        stitched_label[0:ex+sx, 0:ey+sy, 0:ez+sz] += labelmap
+        
+        print("###############################################################################################") 
+        
+    labelmap = np.round(stitched_label)
+    stitched_labeled_img = nb.Nifti1Image(labelmap, reference_labelmap.affine, reference_labelmap.header)
+    
+    return stitched_labeled_img
+
+def kora_vol_label_allignment(file_paths):
+    print("STARTING KORA LABEL-MAPS.")
+    print('Reading Label Maps.....')
+    for vol in file_paths.keys():
+        print(vol)
+        if (vol_to_check_list is not None and vol not in vol_to_check_list) or (vol == "") or (vol in exclude):
+                continue
+
+        print(file_paths[vol]['LABEL_PATHS'])
+        if len(file_paths[vol]['LABEL_PATHS']) == 0:
+            print(f"#################### ALERT:: NO LABELPATHS IN THE DICTIONARY FOR {vol} #########################")
+            continue
+
+        volume = nb.load(file_paths[vol]['N4_2']['OPP_CORRECTED'])
+        f_volume = nb.load(file_paths[vol]['N4_2']['F_CORRECTED'])
+        w_volume = nb.load(file_paths[vol]['N4_2']['W_CORRECTED'])
+        in_volume = nb.load(file_paths[vol]['N4_2']['IN_CORRECTED'])
+
+        img_ras_list = []
+        later = []
+        for label_file_to_read in file_paths[vol]['LABEL_PATHS']:
+            img_ras, lidx, labelname = read_ras(label_file_to_read, is_label=True)
+            if labelname is None or img_ras is None:
+                continue
+            img_ras = makeit_3d(img_ras)
+            if labelname in ['PANCREAS']:
+                later.append([img_ras, lidx+LABEL_EXTENSION_FOR_OVERLAP_REMOVAL, labelname])
+            else:
+                img_ras_list.append([img_ras, lidx+LABEL_EXTENSION_FOR_OVERLAP_REMOVAL, labelname])
+
+        img_ras_list.extend(later)
+        s_label = kora_label_parts(img_ras_list)
+        if SAMPLING:
+            s_label = resample_to_output(s_label, TARGET_RESOLUTION, order=0, mode='nearest', cval=0)
+        s_label = drop_overlapped_pixels(s_label, np.array(img_ras_list)[:, 1])
+
+        if vol == 'KORA2460249':
+            volume, s_label = kora_vol_label_fix(volume, s_label, True)
+        else:
+            volume, s_label = kora_vol_label_fix(volume, s_label)
+
+#         print('Viewing Stitched Images.....')
+#         volume_3_view_viewer(get_volume_data(volume))
+#         volume_3_view_viewer(get_volume_data(f_volume))
+#         volume_3_view_viewer(get_volume_data(w_volume))
+#         volume_3_view_viewer(get_volume_data(in_volume))
+#         volume_3_view_viewer(get_volume_data(s_label))
+
+        print('Saving Processed & Stitched Image.....')
+        save_volume(volume, f'{processed_dir}/volume/{vol}', np.int16)
+        save_volume(f_volume, f'{processed_dir}/volume_f/{vol}', np.int16)
+        save_volume(w_volume, f'{processed_dir}/volume_w/{vol}', np.int16)
+        save_volume(in_volume, f'{processed_dir}/volume_in/{vol}', np.int16)
+        save_volume(s_label, f'{processed_dir}/label/{vol}', np.int16)
+
+    print('FINISHED.')
+
+def nako_vol_label_fix(vol, label):
+    world_shape = np.max(np.array([list(vol.shape), list(label.shape)]), axis=0)
+    final_label = np.zeros(tuple(world_shape))
+
+    label_affine = label.affine
+    vol_affine = vol.affine
+    
+    target_affine = vol_affine
+    target_header = vol.header
+    target_dim_v = vol.shape
+
+    sx,sy,sz,ex,ey,ez = np.abs(get_points(label, vol))
+    
+    final_label[0:ex+sx, 0:ey+sy, sz:ez] = label.get_fdata()
+    
+    final_label = np.flip(final_label, axis=0)
+    final_label = np.flip(final_label, axis=1)
+    
+    final_label_img = nb.Nifti1Image(final_label, target_affine, target_header)
+    return vol, final_label_img
+
+def nako_label_parts(label_parts, reference_labelmap=None):
+    stitched_label = None
+    mode = 'nearest'
+    order = 0
+    if reference_labelmap is None:
+        label_shape = get_freequent_shape([img.shape for img, _, _ in label_parts])
+        reference_labelmap = [img for img, _, _ in label_parts if list(img.shape) == list(label_shape)][0]
+    else:
+        label_shape = reference_labelmap.shape
+
+    stitched_label = np.zeros(label_shape)
+    for labelmap_img, lidx, lname in label_parts:
+        print(lidx, lname)
+        labelmap_img = makeit_3d(labelmap_img)
+        labelmap_img = resample_from_to(labelmap_img, [label_shape, reference_labelmap.affine], order=order, mode=mode, cval=0)
+        
+        sx,sy,sz,ex,ey,ez = np.abs(get_points(labelmap_img, reference_labelmap))
+        
+        labelmap = labelmap_img.get_fdata()
+        labelmap = np.multiply(lidx, labelmap)
+        stitched_label[0:ex+sx, 0:ey+sy, 0:ez+sz] += labelmap
+        
+        print("###############################################################################################") 
+        
+    labelmap = np.round(stitched_label)
+    stitched_labeled_img = nb.Nifti1Image(labelmap, reference_labelmap.affine, reference_labelmap.header)
+    
+    return stitched_labeled_img
+
+def nako_vol_label_allignment(file_paths):
+    print("STARTING NAKO LABEL-MAPS.")
+    print('Reading Label Maps.....')
+    for vol in file_paths.keys():
+        print(vol)
+        if vol_to_check_list is not None and vol not in vol_to_check_list or (vol == "") or (vol in exclude):
+            continue
+
+        print(file_paths[vol]['LABEL_PATHS'])
+        if len(file_paths[vol]['LABEL_PATHS']) == 0:
+            print(f"#################### ALERT:: NO LABELPATHS IN THE DICTIONARY FOR {vol} #########################")
+            continue
+        volume = nb.load(file_paths[vol]['N4_2']['OPP_CORRECTED'])
+        f_volume = nb.load(file_paths[vol]['N4_2']['F_CORRECTED'])
+        w_volume = nb.load(file_paths[vol]['N4_2']['W_CORRECTED'])
+        in_volume = nb.load(file_paths[vol]['N4_2']['IN_CORRECTED'])
+
+        img_ras_list = []
+        later = []
+        for label_file_to_read in file_paths[vol]['LABEL_PATHS']:
+            img_ras, lidx, labelname = read_ras(label_file_to_read, is_label=True)
+            if labelname is None or img_ras is None:
+                continue
+            img_ras = makeit_3d(img_ras)
+
+            if labelname in ['SPLEEN']:
+                later.append([img_ras, lidx+LABEL_EXTENSION_FOR_OVERLAP_REMOVAL, labelname])
+            else:
+                img_ras_list.append([img_ras, lidx+LABEL_EXTENSION_FOR_OVERLAP_REMOVAL, labelname])
+
+        img_ras_list.extend(later)
+
+        s_label = nako_label_parts(img_ras_list)
+        if SAMPLING:
+            s_label = resample_to_output(s_label, TARGET_RESOLUTION, order=0, mode='nearest', cval=0)
+        s_label = drop_overlapped_pixels(s_label, np.array(img_ras_list)[:, 1])
+        volume, s_label = nako_vol_label_fix(volume, s_label)
+
+#         print('Viewing Stitched Images.....')
+#         volume_3_view_viewer(get_volume_data(volume))
+#         volume_3_view_viewer(get_volume_data(f_volume))
+#         volume_3_view_viewer(get_volume_data(w_volume))
+#         volume_3_view_viewer(get_volume_data(in_volume))
+#         volume_3_view_viewer(get_volume_data(s_label))
+
+        print('Saving Processed & Stitched Image.....')
+        save_volume(volume, f'{processed_dir}/volume/{vol}', np.int16)
+        save_volume(f_volume, f'{processed_dir}/volume_f/{vol}', np.int16)
+        save_volume(w_volume, f'{processed_dir}/volume_w/{vol}', np.int16)
+        save_volume(in_volume, f'{processed_dir}/volume_in/{vol}', np.int16)
+        save_volume(s_label, f'{processed_dir}/label/{vol}', np.int16)
+        print('FINISHED.')
+        
+def ukb_vol_label_fix(vol, label, use_alternate_approach=False):
+    world_shape = np.max(np.array([list(vol.shape), list(label.shape)]), axis=0)
+    final_label = np.zeros(tuple(world_shape))
+    
+    label_affine = label.affine
+    vol_affine = vol.affine
+    target_affine = vol_affine
+    target_header = vol.header
+
+    sx,sy,sz,ex,ey,ez = np.abs(get_points(label, vol))
+    labelmap = label.get_fdata()
+    
+    if not use_alternate_approach:
+        final_label[0:sx+ex, 0:sy+ey, sz:ez] = labelmap
+    else:
+        final_label[0:sx+ex, 0:sy+ey, sz-20:ez-20] = labelmap
+
+    final_label = np.flip(final_label, axis=0)
+    final_label = np.flip(final_label, axis=1)
+    
+    final_label_img = nb.Nifti1Image(final_label, target_affine, target_header)
+    
+    return vol, final_label_img
+
+def ukb_label_parts(label_parts, reference_labelmap=None):
+    stitched_label = None
+    mode = 'nearest'
+    order = 0
+    if reference_labelmap is None:
+        label_shape = np.max([img.shape for img, _, _ in label_parts], axis=0)
+        reference_labelmap = [img for img, _, _ in label_parts if list(img.shape) == list(label_shape)][0]
+    else:
+        label_shape = reference_labelmap.shape
+
+    stitched_label = np.zeros(label_shape)
+    for labelmap_img, lidx, lname in label_parts:
+        print(lidx, lname)
+        labelmap_img = makeit_3d(labelmap_img)
+        labelmap_img = resample_from_to(labelmap_img, [label_shape, reference_labelmap.affine], order=order, mode=mode, cval=0)
+        
+        sx,sy,sz,ex,ey,ez = np.abs(get_points(labelmap_img, reference_labelmap))
+        
+        labelmap = labelmap_img.get_fdata()
+        labelmap = np.multiply(lidx, labelmap)
+        stitched_label[0:ex+sx, 0:ey+sy, 0:ez+sz] += labelmap
+        
+        print("###############################################################################################") 
+        
+    labelmap = np.round(stitched_label)
+    stitched_labeled_img = nb.Nifti1Image(labelmap, reference_labelmap.affine, reference_labelmap.header)
+    
+    return stitched_labeled_img
+
+def ukb_vol_label_allignment(file_paths):
+    print("STARTING NAKO LABEL-MAPS.")
+    print('Reading Label Maps.....')
+    for vol in file_paths.keys():
+        print(vol)
+        if vol_to_check_list is not None and vol not in vol_to_check_list or (vol == "") or (vol in exclude):
+            continue
+
+        print(file_paths[vol]['LABEL_PATHS'])
+        if len(file_paths[vol]['LABEL_PATHS']) == 0:
+            print(f"#################### ALERT:: NO LABELPATHS IN THE DICTIONARY FOR {vol} #########################")
+            continue
+
+        volume = nb.load(file_paths[vol]['N4_2']['OPP_CORRECTED'])
+        f_volume = nb.load(file_paths[vol]['N4_2']['F_CORRECTED'])
+        w_volume = nb.load(file_paths[vol]['N4_2']['W_CORRECTED'])
+        in_volume = nb.load(file_paths[vol]['N4_2']['IN_CORRECTED'])
+
+        img_ras_list = []
+        later = []
+        for label_file_to_read in file_paths[vol]['LABEL_PATHS']:
+            img_ras, lidx, labelname = read_ras(label_file_to_read, is_label=True)
+            if labelname is None or img_ras is None:
+                continue
+            img_ras = makeit_3d(img_ras)
+            if labelname in ['SPLEEN', 'PANCREAS']:
+                later.append([img_ras, lidx+LABEL_EXTENSION_FOR_OVERLAP_REMOVAL, labelname])
+            else:
+                img_ras_list.append([img_ras, lidx+LABEL_EXTENSION_FOR_OVERLAP_REMOVAL, labelname])
+
+        img_ras_list.extend(later)
+        s_label = ukb_label_parts(img_ras_list)
+        if SAMPLING:
+            s_label = resample_to_output(s_label, TARGET_RESOLUTION, order=0, mode='nearest', cval=0)
+        s_label = drop_overlapped_pixels(s_label, np.array(img_ras_list)[:, 1])
+
+        if vol == '1004985_20201_2_0':
+            volume, s_label = ukb_vol_label_fix(volume, s_label, True)
+        else:
+            volume, s_label = ukb_vol_label_fix(volume, s_label)
+
+#         print('Viewing Stitched Images.....')
+#         volume_3_view_viewer(get_volume_data(volume))
+#         volume_3_view_viewer(get_volume_data(f_volume))
+#         volume_3_view_viewer(get_volume_data(w_volume))
+#         volume_3_view_viewer(get_volume_data(in_volume))
+#         volume_3_view_viewer(get_volume_data(s_label))
+
+        print('Saving Processed & Stitched Image.....')
+        save_volume(volume, f'{processed_dir}/volume/{vol}', np.int16)
+        save_volume(f_volume, f'{processed_dir}/volume_f/{vol}', np.int16)
+        save_volume(w_volume, f'{processed_dir}/volume_w/{vol}', np.int16)
+        save_volume(in_volume, f'{processed_dir}/volume_in/{vol}', np.int16)
+        save_volume(s_label, f'{processed_dir}/label/{vol}', np.int16)
+        print('FINISHED.')
+    

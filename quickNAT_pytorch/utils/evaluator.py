@@ -131,8 +131,8 @@ def evaluate_dice_score(model_path, num_classes, data_dir, label_dir, volumes_tx
                 volume, labelmap, class_weights, weights, header, affine = img.get_fdata(), label.get_fdata(), None, None, img.header, img.affine
                 volume = np.rollaxis(volume, to_axis_dict[orientation], 0)
                 labelmap = np.rollaxis(labelmap, to_axis_dict[orientation], 0)
-                # template = np.zeros_like(labelmap)
-                # volume, _, _, labelmap, _, S, E = remove_black_3channels(volume,None, None, labelmap, None, return_indices=True)
+                template = np.zeros_like(labelmap)
+                volume, _, _, labelmap, _, S, E = remove_black_3channels(volume,None, None, labelmap, None, return_indices=True)
                 print(volume.shape, labelmap.shape)
             volume = volume if len(volume.shape) == 4 else volume[:, np.newaxis, :, :]
             volume, labelmap = torch.tensor(volume).type(torch.FloatTensor), torch.tensor(labelmap).type(torch.LongTensor)

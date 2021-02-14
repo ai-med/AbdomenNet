@@ -100,17 +100,15 @@ class MRIDataset(data.Dataset):
             img_data = np.rollaxis(img_data, self.to_axis, 0)
             label_data = np.rollaxis(label_data, self.to_axis, 0)
             water_data = np.rollaxis(water_data, self.to_axis, 0)
-            # fat_data = np.rollaxis(fat_data, 2, 0)
+            # fat_data = np.rollaxis(fat_data, self.to_axis, 0)
 
             img_data, _, water_data, label_data = self.remove_black_3channels(img_data, None, water_data, label_data)
 
-            # cw = 0
             cw, _ = estimate_weights_mfb(label_data)
             w = estimate_weights_per_slice(label_data)
 
             img_array.extend(img_data)
             label_array.extend(label_data)
-            # print(img_data.shape, water_data.shape)
             water_array.extend(water_data)
             # fat_array.extend(fat_data)
             cw_array.extend(cw)
@@ -132,7 +130,7 @@ class MRIDataset(data.Dataset):
         self.cw = class_weights
         self.w = weights
 
-        print(self.X.shape, self.y.shape, self.cw.shape, self.w.shape)#, self.water.shape)
+        print(self.X.shape, self.y.shape, self.cw.shape, self.w.shape)
 
     def __getitem__(self, index):
         img = self.X[index]
@@ -185,7 +183,7 @@ class MRIDataset(data.Dataset):
                 print('No thickening')
 
 
-        return np.array(thickenImages) # np.stack(thickenImages, axis=0)
+        return np.array(thickenImages)
 
     def thickenTheSlice(self, index, img=None):
         img = img if img is not None else self.X[index] 
@@ -258,11 +256,10 @@ def train(train_params, common_params, data_params, net_params):
     val_loader = torch.utils.data.DataLoader(ds_test, batch_size=train_params['val_batch_size'], shuffle=False,
                                              num_workers=4, pin_memory=True)
     net_params_ = net_params.copy()
-    
+
     if train_params['use_pre_trained']:
         model = torch.load(train_params['pre_trained_path'])
     else:
-        # net_params_ = net_params.copy()
         if net_params['type'] == 'quicknat':
             model = mclass(net_params)
 
@@ -272,7 +269,6 @@ def train(train_params, common_params, data_params, net_params):
                     device=common_params['device'],
                     num_class=net_params['num_class'],
                     optim=torch.optim.SGD,
-                    # optim_args={"lr": train_params['learning_rate']},
                     optim_args={"lr": train_params['learning_rate'], 
                     "momentum": train_params['momentum'],
                     "weight_decay": train_params['optim_weight_decay']},
@@ -304,7 +300,6 @@ def evaluate(eval_params, net_params, data_params, common_params, train_params):
     data_dir = eval_params['data_dir']
     label_dir = eval_params['label_dir']
     volumes_txt_file = eval_params['volumes_txt_file']
-    # remap_config = eval_params['remap_config']
     device = common_params['device']
     log_dir = common_params['log_dir']
     exp_dir = common_params['exp_dir']
@@ -312,7 +307,6 @@ def evaluate(eval_params, net_params, data_params, common_params, train_params):
     save_predictions_dir = eval_params['save_predictions_dir']
     prediction_path = os.path.join(exp_dir, exp_name, save_predictions_dir)
     orientation = eval_params['orientation']
-    # data_id = eval_params['data_id']
     multi_channel = data_params['use_3channel']
     use_2channel = data_params['use_2channel']
     thick_channel = data_params['thick_channel']
@@ -342,9 +336,6 @@ def evaluate_bulk(eval_bulk):
     device = eval_bulk['device']
     label_names = eval_bulk['label_names']
     batch_size = eval_bulk['batch_size']
-    # need_unc = eval_bulk['estimate_uncertainty']
-    # mc_samples = eval_bulk['mc_samples']
-    # dir_struct = eval_bulk['directory_struct']
     multi_channel = data_params['use_3channel']
     use_2channel = data_params['use_2channel']
 
