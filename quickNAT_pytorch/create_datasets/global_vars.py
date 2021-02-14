@@ -11,7 +11,7 @@ DEFAULT_VIEW = ['Saggital', 'Coronal', 'Axial']
 DEFAULT_REFERENCE_VIEW = 'Sagittal'
 OPTIMIZATION = 'N4'
 IS_CROPPING = True
-DEFAULT_OUTPUT_PATH = '/mnt/nas/Abhijit/Jyotirmay/abdominal_segmentation/temp3'
+DEFAULT_OUTPUT_PATH = '/mnt/nas/Abhijit/Jyotirmay/abdominal_segmentation/temp2'
 DEFAULT_LINSPACE = 30
 all_n4_process = True
 
@@ -46,8 +46,6 @@ elif DATASET == 'UKB':
     SAMPLING = True
 else:
     raise Exception('NO DATA DIRECTORY FOUND!!!')
-
-# label_dir = f'/mnt/nas/Abhijit/Jyotirmay/abdominal_segmentation/lablmaps/{DATASET}'
 
 n4_corrected_data_dir = f"{DEFAULT_OUTPUT_PATH}/{DATASET}/n4_corrected_2"
 
