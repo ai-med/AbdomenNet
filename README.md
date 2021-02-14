@@ -1,4 +1,4 @@
-# QuickNat and Bayesian QuickNAT - Pytorch implementation
+# Abdomennet - Pytorch implementation
 
 A fully convolutional network for quick and accurate segmentation of abdominal organs
 -----------------------------------------------------------
