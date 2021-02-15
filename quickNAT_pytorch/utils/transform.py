@@ -15,6 +15,7 @@ def transforms(unsharp_prob=None,
                scale_prob=None,
                rotate_prob=None,
                deform_prob=None,
+               tdeform_prob=None,
                denoise_prob=None,
                ):
 
@@ -33,6 +34,8 @@ def transforms(unsharp_prob=None,
         transform_list.append(Rotate(prob=rotate_prob))
     if deform_prob is not None:
         transform_list.append(ElasticTransform(prob=deform_prob))
+    if tdeform_prob is not None:
+        transform_list.append(ElasticDeformation(prob=tdeform_prob))
     if denoise_prob is not None:
         transform_list.append(TVDenoising(prob=denoise_prob))
 
@@ -161,6 +164,42 @@ class UnsharpMasking(object):
         return image, mask
 
 
+class ElasticDeformation:
+    """
+    code from: https://github.com/wolny/pytorch-3dunet/blob/master/augment/transforms.py
+    Apply elasitc deformations of 3D patches on a per-voxel mesh. Assumes ZYX axis order!
+    Based on: https://github.com/fcalvet/image_tools/blob/master/image_augmentation.py#L62
+    """
+    def __init__(self, spline_order=3, alpha=32, sigma=4, prob=0.5):
+        """
+        :param spline_order: the order of spline interpolation (use 0 for labeled images)
+        :param alpha: scaling factor for deformations
+        :param sigma: smothing factor for Gaussian filter
+        """
+        self.spline_order = spline_order
+        self.alpha = alpha
+        self.sigma = sigma
+        self.prob = prob
+
+    def __call__(self, sample):
+        #assert len(images) == 2
+        img, target = sample
+        
+        if np.random.rand() > self.prob:
+            return img, target
+
+        assert img.ndim == 3
+        dz = gaussian_filter(np.random.randn(*img.shape), self.sigma, mode="constant", cval=0) * self.alpha
+        dy = gaussian_filter(np.random.randn(*img.shape), self.sigma, mode="constant", cval=0) * self.alpha
+        dx = gaussian_filter(np.random.randn(*img.shape), self.sigma, mode="constant", cval=0) * self.alpha
+        z_dim, y_dim, x_dim = img.shape
+        z, y, x = np.meshgrid(np.arange(z_dim), np.arange(y_dim), np.arange(x_dim), indexing='ij')
+        indices = z + dz, y + dy, x + dx
+        img = map_coordinates(img, indices, order=self.spline_order, mode='reflect')
+        target = map_coordinates(target, indices, order=0, mode='reflect')
+        return img, target
+
+
 class ElasticTransform(object):
 
     def __init__(self,
@@ -201,40 +240,6 @@ class ElasticTransform(object):
         mask = distorted_mask.reshape(mask.shape)
 
         return image, mask
-
-
-# it's relatively slow, i.e. ~1s per patch of size 64x200x200
-# For 3D data.
-class ElasticDeformation:
-    """
-    code from: https://github.com/wolny/pytorch-3dunet/blob/master/augment/transforms.py
-    Apply elasitc deformations of 3D patches on a per-voxel mesh. Assumes ZYX axis order!
-    Based on: https://github.com/fcalvet/image_tools/blob/master/image_augmentation.py#L62
-    """
-    def __init__(self, spline_order, alpha=32, sigma=4):
-        """
-        :param spline_order: the order of spline interpolation (use 0 for labeled images)
-        :param alpha: scaling factor for deformations
-        :param sigma: smothing factor for Gaussian filter
-        """
-        self.spline_order = spline_order
-        self.alpha = alpha
-        self.sigma = sigma
-
-    def __call__(self, images):
-        #assert len(images) == 2
-        img = images[0]
-        target = images[1]
-        assert img.ndim == 3
-        dz = gaussian_filter(np.random.randn(*img.shape), self.sigma, mode="constant", cval=0) * self.alpha
-        dy = gaussian_filter(np.random.randn(*img.shape), self.sigma, mode="constant", cval=0) * self.alpha
-        dx = gaussian_filter(np.random.randn(*img.shape), self.sigma, mode="constant", cval=0) * self.alpha
-        z_dim, y_dim, x_dim = img.shape
-        z, y, x = np.meshgrid(np.arange(z_dim), np.arange(y_dim), np.arange(x_dim), indexing='ij')
-        indices = z + dz, y + dy, x + dx
-        img = map_coordinates(img, indices, order=self.spline_order, mode='reflect')
-        target = map_coordinates(target, indices, order=0, mode='reflect')
-        return [img, target]
 
 
 class GammaCorrection(object):

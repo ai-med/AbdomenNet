@@ -1,7 +1,8 @@
 """Quicknat architecture"""
 import numpy as np
-import torch 
+import torch
 import torch.nn as nn
+
 from nn_common_modules import modules as sm
 from squeeze_and_excitation import squeeze_and_excitation as se
 

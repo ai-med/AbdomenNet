@@ -35,8 +35,8 @@ class QuickOct(nn.Module):
         
         self.bottleneck = sm.OctaveDenseBlock(params, se_block_type=params['se_block'])
         params['num_channels'] = params['num_filters'] * 2
-        self.decode1 = sm.OctaveDecoderBlock(params, se_block_type=params['se_block'], step=True)
-        self.decode2 = sm.OctaveDecoderBlock(params, se_block_type=params['se_block'], step=True)
+        self.decode1 = sm.OctaveDecoderBlock(params, se_block_type=params['se_block'])
+        self.decode2 = sm.OctaveDecoderBlock(params, se_block_type=params['se_block'])
 
         self.decode3 = sm.DecoderBlock(params, se_block_type=params['se_block'])
 

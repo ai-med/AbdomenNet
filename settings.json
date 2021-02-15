@@ -1,9 +1,0 @@
-{
-    "sync-rsync.local": "Jyotirmay/abdominal_segmentation",
-    "sync-rsync.remote": "jyotirmay@138.246.223.40:/home/jyotirmay/remote_projects/abdominal_segmentation",
-    "sync-rsync.delete": true,
-    "sync-rsync.include": ".vscode",
-    "sync-rsync.args": ["--rsh=ssh"],
-    "sync-rsync.showProgress": true,
-    "sync-rsync.autoShowOutputOnError": true
-}

@@ -13,9 +13,13 @@ from tensorboardX import SummaryWriter
 
 import utils.evaluator as eu
 
+import json
+import telegram
+from dotenv import load_dotenv
+load_dotenv()
+
 plt.switch_backend('agg')
 plt.axis('scaled')
-
 
 # TODO: Add custom phase names
 class LogWriter(object):
@@ -58,9 +62,7 @@ class LogWriter(object):
         print('epoch ' + phase + ' loss = ' + str(loss))
 
     def cm_per_epoch(self, phase, output, correct_labels, epoch):
-
         print("Confusion Matrix...", end='', flush=True)
-        # print(correct_labels)
         classes = np.arange(0,9)
         _, cm = eu.dice_confusion_matrix(output, correct_labels, classes, mode=phase)
         self.plot_cm('confusion_matrix', phase, cm, self.labels, classes, epoch)
@@ -112,7 +114,7 @@ class LogWriter(object):
         else:
             ds = eu.dice_score_perclass(output, correct_labels, np.arange(0,self.num_class), mode=phase)
             self.plot_dice_score(phase, 'dice_score_per_epoch', ds, 'Dice Score', self.labels, self.num_class, epoch)
-            ds_mean = torch.mean(ds[1:]) #Excluding Background
+            ds_mean = torch.mean(ds[1:])
         print("DONE", flush=True)
         return ds_mean.item()
 
@@ -177,3 +179,9 @@ class LogWriter(object):
         classes = [re.sub(r'([a-z](?=[A-Z])|[A-Z](?=[A-Z][a-z]))', r'\1 ', x) for x in labels]
         classes = ['\n'.join(wrap(l, 40)) for l in classes]
         return classes
+
+bot = telegram.Bot(token=os.getenv('BOT_TOKEN'))
+
+def telegram_notifier(message):
+    bot.sendMessage(chat_id=os.getenv('CHAT_ID'), text=str(message))
+    print('notification sent!')

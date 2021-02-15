@@ -3,7 +3,6 @@ import os
 
 import numpy as np
 import torch
-from sklearn.model_selection import KFold
 import shutil
 from nn_common_modules import losses as additional_losses
 from torch.optim import lr_scheduler
@@ -11,16 +10,9 @@ from torch.optim import lr_scheduler
 import utils.common_utils as common_utils
 from utils.log_utils import LogWriter
 
-# import wandb
-
 CHECKPOINT_DIR = 'checkpoints'
 ARCHITECTURE_DIR = 'architecture'
 CHECKPOINT_EXTENSION = 'pth.tar'
-
-import torch.utils.data as data
-from utils.transform import transforms
-from utils.data_utils import MRIDataset
-transform = transforms(rotate_prob=0.5, denoise_prob=0.5)
 
 class Solver(object):
 
@@ -45,7 +37,7 @@ class Solver(object):
 
         self.device = device
         self.model = model
-        self.swa_model = torch.optim.swa_utils.AveragedModel(self.model)
+        self.swa_model = torch.optim.swa_utils.AveragedModel(self.model) #
         self.model_name = model_name
         self.labels = labels
         self.num_epochs = num_epochs
@@ -56,7 +48,7 @@ class Solver(object):
         self.optim = optim(model.parameters(), **optim_args)
         # self.scheduler = lr_scheduler.StepLR(self.optim, step_size=lr_scheduler_step_size,
         #                                      gamma=lr_scheduler_gamma)
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optim, T_max=300)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optim, T_max=100)
         self.swa_start = -1 #int(np.round(self.num_epochs*0.75))
         print(self.swa_start)
         self.swa_scheduler = torch.optim.swa_utils.SWALR(self.optim, swa_lr=0.05)
@@ -70,25 +62,21 @@ class Solver(object):
         
         self.log_nth = log_nth
         self.logWriter = LogWriter(num_class, log_dir, exp_name, use_last_checkpoint, labels)
-        # self.wandb = wandb
 
         self.use_last_checkpoint = use_last_checkpoint
 
-        self.fold=1
         self.start_epoch = 1
         self.start_iteration = 1
 
         self.best_ds_mean = 0
         self.best_ds_mean_epoch = 0
 
-        self.kfold = KFold(n_splits=5, shuffle=False, random_state=None)
-
         if use_last_checkpoint:
             self.load_checkpoint()
 
-        print(self.best_ds_mean, self.best_ds_mean_epoch, self.start_epoch, self.fold)
-    # TODO:Need to correct the CM and dice score calculation.
-    def train(self, train_loader, val_loader, raw_paths):
+        print(self.best_ds_mean, self.best_ds_mean_epoch, self.start_epoch)
+
+    def train(self, train_loader, val_loader):
         """
         Train a given model with the provided data.
 
@@ -97,141 +85,112 @@ class Solver(object):
         - val_loader: val data in torch.utils.data.DataLoader
         """
         model, optim, scheduler = self.model, self.optim, self.scheduler
-        # self.wandb.watch(model)
+
         swa_model, swa_scheduler, swa_start = self.swa_model, self.swa_scheduler, self.swa_start
-        # dataloaders = {
-        #     'train': train_loader,
-        #     'val': val_loader
-        # }
+        dataloaders = {
+            'train': train_loader,
+            'val': val_loader
+        }
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             model.cuda(self.device)
 
-        X_files, X_wd_files, y_files, settings = raw_paths
-        X_files, X_wd_files, y_files = np.array(X_files), np.array(X_wd_files), np.array(y_files)
-        orientation, train_batch_size, val_batch_size = settings
         print('START TRAINING. : model name = %s, device = %s' % (
-        self.model_name, torch.cuda.get_device_name(self.device)))
+            self.model_name, torch.cuda.get_device_name(self.device)))
         current_iteration = self.start_iteration
-        for fold, (train_index, val_index) in enumerate(self.kfold.split(X_files, y_files)):
-            if fold<self.fold:
-                continue
+        for epoch in range(self.start_epoch, self.num_epochs + 1):
+            print("\n==== Epoch [ %d  /  %d ] START ====" % (epoch, self.num_epochs))
+            for phase in ['train', 'val']:
+                print("<<<= Phase: %s =>>>" % phase)
+                loss_arr = []
+                out_list = []
+                y_list = []
+                if phase == 'train':
+                    model.train()
+                    # scheduler.step()
+                else:
+                    model.eval()
+                for i_batch, sample_batched in enumerate(dataloaders[phase]):
+                    X = sample_batched[0].type(torch.FloatTensor)
+                    y = sample_batched[1].type(torch.LongTensor)
+                    w = sample_batched[3].type(torch.FloatTensor)
+                    wd = sample_batched[2].type(torch.FloatTensor)
 
-            self.fold=fold
-            self.start_epoch = 1
-            print(train_index.shape, val_index.shape)
-            x_train_fold = X_files[train_index] 
-            y_train_fold = y_files[train_index]
-            wd_train_fold = X_wd_files[train_index]
-            x_val_fold = X_files[val_index] 
-            y_val_fold = y_files[val_index]
-            wd_val_fold = X_wd_files[val_index]
+                    if model.is_cuda:
+                        X, y, w, wd = X.cuda(self.device, non_blocking=True), y.cuda(self.device, non_blocking=True), \
+                                       w.cuda(self.device, non_blocking=True), wd.cuda(self.device, non_blocking=True)
 
-            train = MRIDataset(x_train_fold, y_train_fold, transforms=transform, water_vols=wd_train_fold, orientation=orientation, fold=self.fold)
-            val = MRIDataset(x_val_fold, y_val_fold, transforms=None, water_vols=wd_val_fold, orientation=orientation, fold=self.fold)
-            train_loader = torch.utils.data.DataLoader(train, batch_size = train_batch_size, shuffle = True, num_workers=4, pin_memory=True)
-            val_loader = torch.utils.data.DataLoader(val, batch_size = val_batch_size, shuffle = False, num_workers=4, pin_memory=True)
+                    output = model(X)
+                    if phase == 'val':
+                        pass
 
-            dataloaders = {
-                'train': train_loader,
-                'val': val_loader
-            }
-            for epoch in range(self.start_epoch, self.num_epochs + 1):
-                # print("\n==== Epoch [ %d  /  %d ] START ====" % (epoch, self.num_epochs))
-                print('\n==== Epoch {} / {} \nFold number {} / {}'.format(epoch, self.num_epochs, self.fold , self.kfold.get_n_splits()))
-                for phase in ['train', 'val']:
-                    print("<<<= Phase: %s =>>>" % phase)
-                    loss_arr = []
-                    out_list = []
-                    y_list = []
+                    loss = self.loss_func(output, y, wd, None)
+
                     if phase == 'train':
-                        model.train()
-                    else:
-                        model.eval()
-                    for i_batch, sample_batched in enumerate(dataloaders[phase]):
-                        X = sample_batched[0].type(torch.FloatTensor)
-                        y = sample_batched[1].type(torch.LongTensor)
-                        # w = sample_batched[3].type(torch.FloatTensor)
-                        wd = sample_batched[2].type(torch.FloatTensor)
+                        optim.zero_grad()
+                        loss.backward()
+                        optim.step()
+                        if epoch > swa_start:
+                          swa_model.update_parameters(model)
+                          swa_scheduler.step()
+                        else:
+                            scheduler.step()
+                        if i_batch % self.log_nth == 0:
+                            self.logWriter.loss_per_iter(loss.item(), i_batch, current_iteration)
+                        current_iteration += 1
 
-                        if model.is_cuda:
-                            X, y, wd = X.cuda(self.device, non_blocking=True), y.cuda(self.device, non_blocking=True), \
-                                        wd.cuda(self.device, non_blocking=True)
+                    loss_arr.append(loss.item())
 
-                        output = model(X)
-                        if phase == 'val':
-                            pass
+                    _, batch_output = torch.max(output, dim=1)
+                    out_list.append(batch_output.cpu())
+                    y_list.append(y.cpu())
 
-                        loss = self.loss_func(output, y, wd, None)
+                    del X, y, output, batch_output, loss, wd, w
+                    torch.cuda.empty_cache()
+                    if phase == 'val':
+                        if i_batch != len(dataloaders[phase]) - 1:
+                            print("#", end='', flush=True)
+                        else:
+                            print("100%", flush=True)
 
-                        if phase == 'train':
-                            optim.zero_grad()
-                            loss.backward()
-                            optim.step()
-                            #scheduler.step(epoch)
-                            if epoch > swa_start:
-                                swa_model.update_parameters(model)
-                                swa_scheduler.step()
-                            else:
-                                scheduler.step()
-                            if i_batch % self.log_nth == 0:
-                                self.logWriter.loss_per_iter(loss.item(), i_batch, current_iteration)
-                            current_iteration += 1
+                with torch.no_grad():
+                    out_arr, y_arr = torch.cat(out_list), torch.cat(y_list)
+                    self.logWriter.loss_per_epoch(loss_arr, phase, epoch)
+                    index = np.random.choice(len(dataloaders[phase].dataset.X), 3, replace=False)
+                    print("index", index)
+                    val_imgs, val_labels = dataloaders[phase].dataset.getItem(index)
+                    predicted_imgs = model.predict(val_imgs, self.device)
+                    if val_imgs.shape[1] > 1:
+                        mid_slice = val_imgs.shape[1]//2
+                        val_imgs = val_imgs[:, mid_slice, :, :]
+                    self.logWriter.image_per_epoch(val_imgs, predicted_imgs, val_labels, phase, epoch)
+                    self.logWriter.cm_per_epoch(phase, out_arr, y_arr, epoch)
 
-                        loss_arr.append(loss.item())
+                    ds_mean = self.logWriter.dice_score_per_epoch(phase, out_arr, y_arr, epoch)
+                    if phase == 'val':
+                        if ds_mean > self.best_ds_mean:
+                            self.best_ds_mean = ds_mean
+                            self.best_ds_mean_epoch = epoch
 
-                        _, batch_output = torch.max(output, dim=1)
-                        out_list.append(batch_output.cpu())
-                        y_list.append(y.cpu())
+                        print(out_arr.shape, epoch, ds_mean, self.best_ds_mean, self.best_ds_mean_epoch)
 
-                        del X, y, output, batch_output, loss, wd
-                        torch.cuda.empty_cache()
-                        if phase == 'val':
-                            if i_batch != len(dataloaders[phase]) - 1:
-                                print("#", end='', flush=True)
-                            else:
-                                print("100%", flush=True)
-
-                    with torch.no_grad():
-                        out_arr, y_arr = torch.cat(out_list), torch.cat(y_list)
-                        self.logWriter.loss_per_epoch(loss_arr, phase, epoch)
-                        index = np.random.choice(len(dataloaders[phase].dataset.X), 3, replace=False)
-                        print("index", index)
-                        val_imgs, val_labels = dataloaders[phase].dataset.getItem(index)
-                        predicted_imgs = model.predict(val_imgs, self.device)
-                        if val_imgs.shape[1] > 1:
-                            mid_slice = val_imgs.shape[1]//2
-                            val_imgs = val_imgs[:, mid_slice, :, :]
-                        self.logWriter.image_per_epoch(val_imgs, predicted_imgs, val_labels, phase, epoch)
-                        self.logWriter.cm_per_epoch(phase, out_arr, y_arr, epoch)
-
-                        ds_mean = self.logWriter.dice_score_per_epoch(phase, out_arr, y_arr, epoch)
-                        if phase == 'val':
-                            if ds_mean > self.best_ds_mean:
-                                self.best_ds_mean = ds_mean
-                                self.best_ds_mean_epoch = epoch
-                                self.best_fold = self.fold
-
-                            print(out_arr.shape, epoch, ds_mean, self.best_ds_mean, self.best_ds_mean_epoch, self.best_fold)
-
-                print("==== Epoch [" + str(epoch) + " / " + str(self.num_epochs) + "] DONE ====")
-                self.save_checkpoint({
-                    'epoch': epoch + 1,
-                    'fold': self.fold + 1,
-                    'start_iteration': current_iteration + 1,
-                    'arch': self.model_name,
-                    'best_ds_mean': self.best_ds_mean,
-                    'best_ds_mean_epoch': self.best_ds_mean_epoch,
-                    'best_fold': self.best_fold,
-                    'state_dict': model.state_dict(),
-                    'optimizer': optim.state_dict(),
-                    'scheduler': scheduler.state_dict()
-                }, os.path.join(self.exp_dir_path, CHECKPOINT_DIR, str(self.fold),
-                                'checkpoint_epoch_' + str(epoch) + '.' + CHECKPOINT_EXTENSION)) 
+            print("==== Epoch [" + str(epoch) + " / " + str(self.num_epochs) + "] DONE ====")
+            self.save_checkpoint({
+                'epoch': epoch + 1,
+                'start_iteration': current_iteration + 1,
+                'arch': self.model_name,
+                'best_ds_mean': self.best_ds_mean,
+                'best_ds_mean_epoch': self.best_ds_mean_epoch,
+                'state_dict': model.state_dict(),
+                'optimizer': optim.state_dict(),
+                'scheduler': scheduler.state_dict()
+            }, os.path.join(self.exp_dir_path, CHECKPOINT_DIR,
+                            'checkpoint_epoch_' + str(epoch) + '.' + CHECKPOINT_EXTENSION)) 
 
         torch.optim.swa_utils.update_bn(dataloaders['train'], swa_model)
         self.model = swa_model
+        # self.model = model
         print('FINISH.')
         self.logWriter.close()
 
@@ -262,45 +221,36 @@ class Solver(object):
         print('Saving model... %s' % path)
         print('Best Model at Epoch: ' + str(self.best_ds_mean_epoch))
         print('Best Model with val Dice Score: ' + str(self.best_ds_mean))
-        self.load_checkpoint(self.best_ds_mean_epoch, self.best_fold)
+        self.load_checkpoint(self.best_ds_mean_epoch)
 
         torch.save(self.model, path)
 
     def save_checkpoint(self, state, filename):
-        directory = os.path.dirname(filename)
-        if not os.path.exists(directory):
-            os.makedirs(directory)
         torch.save(state, filename)
 
-    def load_checkpoint(self, epoch=None, fold=None):
-        if fold is None:
-            fold = self.fold
+    def load_checkpoint(self, epoch=None):
         if epoch is not None:
-            checkpoint_path = os.path.join(self.exp_dir_path, CHECKPOINT_DIR, str(fold),
+            checkpoint_path = os.path.join(self.exp_dir_path, CHECKPOINT_DIR,
                                            'checkpoint_epoch_' + str(epoch) + '.' + CHECKPOINT_EXTENSION)
             self._load_checkpoint_file(checkpoint_path)
         else:
-            all_fold_dirs = os.path.join(self.exp_dir_path, CHECKPOINT_DIR, '*')
-            list_of_folds = glob.glob(all_fold_dirs)
-            max_fold = len(list_of_folds)
-            all_files_path = os.path.join(self.exp_dir_path, CHECKPOINT_DIR, str(max_fold), '*.' + CHECKPOINT_EXTENSION)
+            all_files_path = os.path.join(self.exp_dir_path, CHECKPOINT_DIR, '*.' + CHECKPOINT_EXTENSION)
             list_of_files = glob.glob(all_files_path)
+            
             if len(list_of_files) > 0:
                 checkpoint_path = max(list_of_files, key=os.path.getctime)
                 self._load_checkpoint_file(checkpoint_path)
             else:
                 self.logWriter.log(
-                    "=> no checkpoint found at '{}' folder".format(os.path.join(self.exp_dir_path, CHECKPOINT_DIR, str(self.fold))))
+                    "=> no checkpoint found at '{}' folder".format(os.path.join(self.exp_dir_path, CHECKPOINT_DIR)))
 
     def _load_checkpoint_file(self, file_path):
         self.logWriter.log("=> loading checkpoint '{}'".format(file_path))
         checkpoint = torch.load(file_path)
         self.start_epoch = checkpoint['epoch']
-        self.fold = checkpoint['fold'] - 1
         if 'best_ds_mean' in checkpoint.keys():
             self.best_ds_mean = checkpoint['best_ds_mean']
             self.best_ds_mean_epoch = checkpoint['best_ds_mean_epoch']
-            self.best_fold = checkpoint['best_fold']
         self.start_iteration = checkpoint['start_iteration']
         self.model.load_state_dict(checkpoint['state_dict'])
         self.optim.load_state_dict(checkpoint['optimizer'])

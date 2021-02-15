@@ -72,16 +72,13 @@ class CalDiceLoss(_WeightedLoss):
         #    denominator[mask] = 0
         if dim == 2:
             denominator = denominator.sum(0).sum(1).sum(1) + eps
-            # denominator = denominator.sum(0).sum(1).sum(1)
         elif dim == 3:
             denominator = denominator.sum(0).sum(1).sum(1).sum(1) + eps
-            # denominator = denominator.sum(0).sum(1).sum(1).sum(1)
         else:
             raise ValueError('Expected dimension 2 or 3, got dim {}'.format(
                 dim))
         dice = numerator / denominator
-        # dice = (numerator + 1) / (denominator + 1)
-        #loss_per_channel = weights * (1 - dice)
+
         loss_per_channel = 1.0-dice
         return loss_per_channel.sum() / output.size(1), dice
 
@@ -92,29 +89,16 @@ class DiceLoss(_WeightedLoss):
     """
 
     def forward(self, output, target, weight=None):
-        #print('output: ', output.shape)
-        #print('target: ', target.shape)
         output = F.softmax(output, dim=1)
-        #print(output.shape)
-        eps = 0.0001
         target = target.unsqueeze(1)
-        #print(target.shape)
-        #print(torch.min(target))
-        #print(torch.max(target))
         encoded_target = torch.zeros_like(output)
-        #print(encoded_target)
-
         encoded_target = encoded_target.scatter(1, target, 1)
-        #print(encoded_target)
+
         intersection = output * encoded_target
         intersection = intersection.sum(2).sum(2)
-        #print(intersection)
 
         num_union_pixels = output + encoded_target
         num_union_pixels = num_union_pixels.sum(2).sum(2)
-        #print(num_union_pixels)
-
-        # loss_per_class = 1 - ((2 * intersection) / (num_union_pixels + eps))
         loss_per_class = 1 - ((2 * intersection + 1) / (num_union_pixels + 1))
         if weight is None:
             weight = torch.ones_like(loss_per_class)
@@ -145,13 +129,11 @@ class CombinedLoss(_Loss):
         :return: scalar
         """
         y_2 = self.dice_loss(input, target, dice_weights)
-        # y_2, _ = self.cal_dice_loss(input, target, dice_weights)
-        # print('dice loss', y_2)
         if class_weights is None:
             y_1 = torch.mean(self.cross_entropy_loss.forward(input, target))
         else:
             y_1 = torch.mean(torch.mul(self.cross_entropy_loss.forward(input, target), class_weights))
-        #print('ce loss: ', y_1)
+
         return y_1 + y_2
 
 
