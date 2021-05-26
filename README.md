@@ -1,4 +1,4 @@
-# Abdomennet - Pytorch implementation
+# AbdomenNet - PyTorch implementation
 
 A fully convolutional network for quick and accurate segmentation of abdominal organs
 -----------------------------------------------------------
