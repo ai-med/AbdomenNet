@@ -163,7 +163,7 @@ txaio==20.12.1
 typing-extensions==3.7.4.3
 tzlocal==2.1
 unittest2==1.1.0
-urllib3==1.25.9
+urllib3==1.26.5
 wcwidth==0.2.2
 webcolors==1.11.1
 webencodings==0.5.1
