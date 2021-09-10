@@ -136,7 +136,7 @@ sgmllib3k==1.0.0
 SimpleITK==2.1.0.dev67
 six==1.15.0
 sklearn==0.0
-sqlparse==0.4.1
+sqlparse==0.4.2
 squeeze-and-excitation==1.0
 statsmodels==0.12.1
 tabulate==0.8.2
