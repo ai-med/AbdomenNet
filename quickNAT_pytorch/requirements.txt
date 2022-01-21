@@ -47,7 +47,7 @@ importlib-metadata==1.6.0
 incremental==17.5.0
 ipydatawidgets==4.1.0
 ipykernel==5.3.0
-ipython==7.15.0
+ipython==7.16.3
 ipython-genutils==0.2.0
 ipyvolume==0.5.2
 ipywebrtc==0.5.0
