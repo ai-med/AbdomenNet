@@ -82,7 +82,7 @@ nilearn==0.5.2
 niwidgets==0.2.2
 nn-common-modules @ https://github.com/ai-med/nn-common-modules/releases/download/v1.2/nn_common_modules-1.4-py3-none-any.whl
 -e git+https://github.com/MIC-DKFZ/nnUNet.git@df97059de7040b58394cb2a12c51d6182e8b51d4#egg=nnunet
-notebook==6.1.5
+notebook==6.4.10
 numpy==1.16.6
 oauthlib==3.1.0
 olefile==0.46
